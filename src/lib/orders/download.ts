@@ -1,14 +1,22 @@
 import "server-only";
 import {
-  LICENSE_LABELS,
   STORAGE_BUCKETS,
   type LicenseType,
 } from "@/lib/constants";
+import {
+  DOWNLOAD_FILE_LABELS,
+  getEntitledFileTypes,
+  isEntitledFileType,
+  parseDownloadFileType,
+  type DownloadFileType,
+} from "@/lib/orders/download-entitlements";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
+import type { BeatLicense } from "@/types/database";
 
 type DownloadAccessParams = {
   orderItemId: string;
+  fileType: DownloadFileType;
   sessionId?: string | null;
 };
 
@@ -19,7 +27,6 @@ type OrderItemRow = {
   license_type: string;
   beat_title: string;
   download_count: number;
-  beat_license_id: string;
   orders: {
     id: string;
     email: string;
@@ -50,7 +57,7 @@ function normalizeOrderItemRow(item: Record<string, unknown>): OrderItemRow {
 
 export function buildPaidDownloadFilename(
   beatTitle: string,
-  licenseType: LicenseType,
+  fileType: DownloadFileType,
   storagePath: string,
 ): string {
   const slug =
@@ -58,7 +65,7 @@ export function buildPaidDownloadFilename(
       .trim()
       .replace(/\s+/g, "-")
       .replace(/[^a-zA-Z0-9-_]+/g, "") || "beat";
-  const label = LICENSE_LABELS[licenseType];
+  const label = DOWNLOAD_FILE_LABELS[fileType];
   const ext = storagePath.split(".").pop()?.toLowerCase() ?? "file";
   return `LeSkud-${slug}-${label}.${ext}`;
 }
@@ -74,7 +81,7 @@ async function loadOrderItem(
   sessionId?: string | null,
 ): Promise<{ item: OrderItemRow | null; denied: boolean }> {
   const selectQuery =
-    "id, order_id, beat_id, license_type, beat_title, download_count, beat_license_id, orders!inner(id, email, status, stripe_checkout_session_id, user_id)";
+    "id, order_id, beat_id, license_type, beat_title, download_count, orders!inner(id, email, status, stripe_checkout_session_id, user_id)";
 
   if (sessionId) {
     const service = createServiceClient();
@@ -123,9 +130,26 @@ async function loadOrderItem(
   return { item: row, denied: false };
 }
 
+async function loadBeatLicenses(
+  beatId: string,
+): Promise<Pick<BeatLicense, "license_type" | "storage_path">[]> {
+  const service = createServiceClient();
+  const { data } = await service
+    .from("beat_licenses")
+    .select("license_type, storage_path")
+    .eq("beat_id", beatId);
+
+  return data ?? [];
+}
+
 export async function createPaidDownload(
   params: DownloadAccessParams,
 ): Promise<PaidDownloadResult> {
+  const fileType = parseDownloadFileType(params.fileType);
+  if (!fileType) {
+    return { success: false, error: "Type de fichier invalide.", status: 400 };
+  }
+
   const { item, denied } = await loadOrderItem(
     params.orderItemId,
     params.sessionId,
@@ -143,21 +167,31 @@ export async function createPaidDownload(
     return { success: false, error: "Commande non payée.", status: 403 };
   }
 
-  const service = createServiceClient();
+  const purchasedLicense = item.license_type as LicenseType;
+  const beatLicenses = await loadBeatLicenses(item.beat_id);
 
-  const { data: license } = await service
-    .from("beat_licenses")
-    .select("storage_path")
-    .eq("id", item.beat_license_id)
-    .single();
+  if (
+    !isEntitledFileType(purchasedLicense, beatLicenses, fileType)
+  ) {
+    return {
+      success: false,
+      error: "Ce fichier n'est pas inclus dans ta licence.",
+      status: 403,
+    };
+  }
 
-  if (!license?.storage_path?.trim()) {
+  const fileLicense = beatLicenses.find(
+    (license) => license.license_type === fileType,
+  );
+
+  if (!fileLicense?.storage_path?.trim()) {
     return { success: false, error: "Fichier indisponible.", status: 404 };
   }
 
+  const service = createServiceClient();
   const { data: file, error: downloadError } = await service.storage
     .from(STORAGE_BUCKETS.beats)
-    .download(license.storage_path);
+    .download(fileLicense.storage_path);
 
   if (downloadError || !file) {
     return { success: false, error: "Fichier introuvable.", status: 404 };
@@ -171,14 +205,53 @@ export async function createPaidDownload(
   const buffer = Buffer.from(await file.arrayBuffer());
   const filename = buildPaidDownloadFilename(
     item.beat_title,
-    item.license_type as LicenseType,
-    license.storage_path,
+    fileType,
+    fileLicense.storage_path,
   );
 
   return {
     success: true,
     buffer,
     filename,
-    contentType: contentTypeForPath(license.storage_path),
+    contentType: contentTypeForPath(fileLicense.storage_path),
+  };
+}
+
+export async function getDownloadOptionsForOrderItem(
+  orderItemId: string,
+  sessionId?: string | null,
+): Promise<
+  | {
+      success: true;
+      files: { fileType: DownloadFileType; label: string }[];
+    }
+  | { success: false; error: string; status: number }
+> {
+  const { item, denied } = await loadOrderItem(orderItemId, sessionId);
+
+  if (denied) {
+    return { success: false, error: "Accès refusé.", status: 403 };
+  }
+
+  if (!item) {
+    return { success: false, error: "Achat introuvable.", status: 404 };
+  }
+
+  if (item.orders.status !== "paid") {
+    return { success: false, error: "Commande non payée.", status: 403 };
+  }
+
+  const beatLicenses = await loadBeatLicenses(item.beat_id);
+  const entitled = getEntitledFileTypes(
+    item.license_type as LicenseType,
+    beatLicenses,
+  );
+
+  return {
+    success: true,
+    files: entitled.map((fileType) => ({
+      fileType,
+      label: DOWNLOAD_FILE_LABELS[fileType],
+    })),
   };
 }

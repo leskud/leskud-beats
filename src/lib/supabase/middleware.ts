@@ -61,6 +61,10 @@ export async function updateSession(request: NextRequest) {
     return redirectResponse;
   }
 
+  if (pathname.startsWith("/account/licenses/")) {
+    return supabaseResponse;
+  }
+
   if (pathname.startsWith("/account") && !user) {
     const loginUrl = request.nextUrl.clone();
     loginUrl.pathname = "/login";

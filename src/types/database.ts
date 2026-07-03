@@ -55,6 +55,12 @@ export type Order = {
   currency: string;
   created_at: string;
   paid_at: string | null;
+  accepted_terms_at: string | null;
+  accepted_license_at: string | null;
+  terms_version: string | null;
+  license_version: string | null;
+  buyer_ip: string | null;
+  buyer_user_agent: string | null;
 };
 
 export type OrderItem = {

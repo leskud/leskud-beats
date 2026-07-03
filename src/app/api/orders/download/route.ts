@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createPaidDownload } from "@/lib/orders/download";
+import { parseDownloadFileType } from "@/lib/orders/download-entitlements";
 
 export const runtime = "nodejs";
 
@@ -18,14 +19,23 @@ function attachmentHeaders(filename: string, size: number, contentType: string):
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const orderItemId = searchParams.get("orderItemId");
+  const fileType = parseDownloadFileType(searchParams.get("fileType"));
   const sessionId = searchParams.get("sessionId");
 
   if (!orderItemId) {
     return NextResponse.json({ error: "Paramètre manquant." }, { status: 400 });
   }
 
+  if (!fileType) {
+    return NextResponse.json(
+      { error: "Type de fichier manquant ou invalide." },
+      { status: 400 },
+    );
+  }
+
   const result = await createPaidDownload({
     orderItemId,
+    fileType,
     sessionId,
   });
 

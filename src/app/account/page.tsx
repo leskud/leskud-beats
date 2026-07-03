@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { PurchaseDownloads } from "@/components/orders/purchase-downloads";
-import { getUserOrdersWithItems } from "@/lib/orders/queries";
+import { getAccountPurchaseItems } from "@/lib/orders/queries";
 import { getUser } from "@/lib/supabase/server";
 
 export const metadata = {
@@ -9,8 +9,7 @@ export const metadata = {
 
 export default async function AccountPage() {
   const user = await getUser();
-  const orders = await getUserOrdersWithItems();
-  const items = orders.flatMap((order) => order.order_items);
+  const purchaseItems = await getAccountPurchaseItems();
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-16 sm:px-6 lg:px-8">
@@ -30,7 +29,7 @@ export default async function AccountPage() {
       )}
 
       <div className="mt-8">
-        <PurchaseDownloads items={items} />
+        <PurchaseDownloads items={purchaseItems} />
       </div>
     </div>
   );

@@ -173,6 +173,7 @@ export async function createBeat(formData: FormData) {
       mp3: null,
       wav: null,
       stems: null,
+      unlimited: null,
       exclusive: null,
     };
 
@@ -184,6 +185,7 @@ export async function createBeat(formData: FormData) {
     }
 
     if (licensePaths.stems) {
+      licensePaths.unlimited = licensePaths.stems;
       licensePaths.exclusive = licensePaths.stems;
     }
 
@@ -197,9 +199,12 @@ export async function createBeat(formData: FormData) {
     const licenses = LICENSE_TYPES.map((licenseType) => {
       const storagePath = licensePaths[licenseType];
       const isExclusive = licenseType === "exclusive";
+      const isUnlimited = licenseType === "unlimited";
       const isAvailable = isExclusive
         ? Boolean(licensePaths.mp3 && licensePaths.wav)
-        : Boolean(storagePath);
+        : isUnlimited
+          ? Boolean(licensePaths.stems)
+          : Boolean(storagePath);
 
       return {
         beat_id: beatId,
@@ -345,6 +350,11 @@ export async function updateBeat(beatId: string, formData: FormData) {
         .from("beat_licenses")
         .update({ storage_path: stemsPath, is_available: true })
         .eq("beat_id", beatId)
+        .eq("license_type", "unlimited");
+      await supabase
+        .from("beat_licenses")
+        .update({ storage_path: stemsPath, is_available: true })
+        .eq("beat_id", beatId)
         .eq("license_type", "exclusive");
     }
 
@@ -381,12 +391,21 @@ export async function updateBeat(beatId: string, formData: FormData) {
         updatedLicenses.some(
           (l) => l.license_type === "wav" && l.storage_path && l.is_available,
         );
+      const hasStems = updatedLicenses.some(
+        (l) => l.license_type === "stems" && l.storage_path && l.is_available,
+      );
 
       await supabase
         .from("beat_licenses")
         .update({ is_available: canExclusive })
         .eq("beat_id", beatId)
         .eq("license_type", "exclusive");
+
+      await supabase
+        .from("beat_licenses")
+        .update({ is_available: hasStems })
+        .eq("beat_id", beatId)
+        .eq("license_type", "unlimited");
     }
 
     revalidatePath("/");

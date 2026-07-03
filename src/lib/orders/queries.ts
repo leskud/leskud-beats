@@ -1,4 +1,9 @@
 import { createClient } from "@/lib/supabase/server";
+import { loadBeatLicensesForItems } from "@/lib/orders/license-access";
+import {
+  buildPurchaseItemViews,
+  type PurchaseItemView,
+} from "@/lib/orders/purchase-display";
 import type { OrderItem, OrderWithItems } from "@/types/database";
 
 export async function getUserOrdersWithItems(): Promise<OrderWithItems[]> {
@@ -30,4 +35,12 @@ export async function getUserOrdersWithItems(): Promise<OrderWithItems[]> {
     ...(order as OrderWithItems),
     order_items: itemsByOrder.get(order.id) ?? [],
   }));
+}
+
+export async function getAccountPurchaseItems(): Promise<PurchaseItemView[]> {
+  const orders = await getUserOrdersWithItems();
+  const items = orders.flatMap((order) => order.order_items);
+  const beatIds = [...new Set(items.map((item) => item.beat_id))];
+  const beatLicensesByBeatId = await loadBeatLicensesForItems(beatIds);
+  return buildPurchaseItemViews(items, beatLicensesByBeatId);
 }

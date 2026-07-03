@@ -77,6 +77,13 @@ export async function fulfillCheckoutSession(
 
   const totalCents = session.amount_total ?? license.price_cents;
 
+  const acceptedAtRaw = session.metadata?.accepted_at;
+  const acceptedAt = acceptedAtRaw ? new Date(acceptedAtRaw).toISOString() : null;
+  const termsVersion = session.metadata?.terms_version?.trim() || null;
+  const licenseVersion = session.metadata?.license_version?.trim() || null;
+  const buyerIp = session.metadata?.buyer_ip?.trim() || null;
+  const buyerUserAgent = session.metadata?.buyer_user_agent?.trim() || null;
+
   const { data: order, error: orderError } = await supabase
     .from("orders")
     .insert({
@@ -91,6 +98,12 @@ export async function fulfillCheckoutSession(
       total_cents: totalCents,
       currency: session.currency ?? "eur",
       paid_at: new Date().toISOString(),
+      accepted_terms_at: acceptedAt,
+      accepted_license_at: acceptedAt,
+      terms_version: termsVersion,
+      license_version: licenseVersion,
+      buyer_ip: buyerIp || null,
+      buyer_user_agent: buyerUserAgent || null,
     })
     .select("id")
     .single();

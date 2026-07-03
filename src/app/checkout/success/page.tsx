@@ -25,11 +25,14 @@ export default async function CheckoutSuccessPage({ searchParams }: Props) {
       <div className="mx-auto max-w-lg px-4 py-16 sm:px-6">
         <h1 className="text-3xl font-semibold">Merci pour ton achat</h1>
         <p className="mt-2 text-sm text-muted">
-          Télécharge ta licence ci-dessous.
+          Télécharge tes fichiers et consulte ta licence ci-dessous.
         </p>
 
         <div className="mt-8">
-          <PurchaseDownloads items={orderData.items} sessionId={sessionId} />
+          <PurchaseDownloads
+            items={orderData.purchaseItems}
+            sessionId={sessionId}
+          />
         </div>
 
         <Link

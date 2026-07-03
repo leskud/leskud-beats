@@ -8,20 +8,37 @@ export const YOUTUBE_CHANNEL_URL =
   "https://www.youtube.com/channel/UCUu1QVnQLDuhPoUJJoU06qg";
 export const RESEND_TEST_RECIPIENT = "leskud.contact@gmail.com";
 
-export const LICENSE_TYPES = ["mp3", "wav", "stems", "exclusive"] as const;
+export const LICENSE_TYPES = [
+  "mp3",
+  "wav",
+  "stems",
+  "unlimited",
+  "exclusive",
+] as const;
 export type LicenseType = (typeof LICENSE_TYPES)[number];
+
+/** Ordre d'affichage grille commerciale */
+export const LICENSE_DISPLAY_ORDER: LicenseType[] = [
+  "mp3",
+  "wav",
+  "stems",
+  "unlimited",
+  "exclusive",
+];
 
 export const DEFAULT_LICENSE_PRICES: Record<LicenseType, number> = {
   mp3: 2900,
   wav: 4900,
   stems: 9900,
+  unlimited: 14900,
   exclusive: 29900,
 };
 
 export const LICENSE_LABELS: Record<LicenseType, string> = {
   mp3: "MP3",
-  wav: "WAV",
-  stems: "Stems",
+  wav: "Premium WAV",
+  stems: "Premium + Stems",
+  unlimited: "Unlimited + Stems",
   exclusive: "Exclusive",
 };
 

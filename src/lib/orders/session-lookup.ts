@@ -1,18 +1,24 @@
 import "server-only";
 import { createServiceClient } from "@/lib/supabase/service";
-import type { OrderItem } from "@/types/database";
+import {
+  buildPurchaseItemViews,
+  type PurchaseItemView,
+} from "@/lib/orders/purchase-display";
+import { loadBeatLicensesForItems } from "@/lib/orders/license-access";
+import type { Order, OrderItem } from "@/types/database";
 
 export async function getPaidOrderItemsBySessionId(
   sessionId: string,
 ): Promise<{
-  order: { id: string; email: string };
+  order: Order;
   items: OrderItem[];
+  purchaseItems: PurchaseItemView[];
 } | null> {
   const supabase = createServiceClient();
 
   const { data: order } = await supabase
     .from("orders")
-    .select("id, email, status")
+    .select("*")
     .eq("stripe_checkout_session_id", sessionId)
     .eq("status", "paid")
     .maybeSingle();
@@ -25,8 +31,13 @@ export async function getPaidOrderItemsBySessionId(
     .eq("order_id", order.id)
     .order("created_at", { ascending: false });
 
+  const orderItems = (items as OrderItem[]) ?? [];
+  const beatIds = [...new Set(orderItems.map((item) => item.beat_id))];
+  const beatLicensesByBeatId = await loadBeatLicensesForItems(beatIds);
+
   return {
-    order: { id: order.id, email: order.email },
-    items: (items as OrderItem[]) ?? [],
+    order: order as Order,
+    items: orderItems,
+    purchaseItems: buildPurchaseItemViews(orderItems, beatLicensesByBeatId),
   };
 }

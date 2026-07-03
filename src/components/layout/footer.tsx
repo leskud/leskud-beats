@@ -6,6 +6,7 @@ import { SITE_NAME, YOUTUBE_CHANNEL_URL } from "@/lib/constants";
 const footerLinks = [
   { href: "/legal/mentions", label: "Mentions légales" },
   { href: "/legal/cgv", label: "CGV" },
+  { href: "/legal/licences", label: "Licences" },
   { href: "/legal/confidentialite", label: "Confidentialité" },
   { href: "mailto:contact@leskud.beats", label: "Contact" },
 ];

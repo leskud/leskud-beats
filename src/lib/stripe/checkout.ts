@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getAppUrl } from "@/lib/config/env";
 import { LICENSE_LABELS } from "@/lib/constants";
 import { getLicenseAvailability } from "@/lib/beats/licenses";
+import { LICENSE_VERSION, TERMS_VERSION } from "@/lib/legal/versions";
 import { createClient } from "@/lib/supabase/server";
 import { getCheckoutProductName } from "@/lib/stripe/fulfill-order";
 import { getStripe } from "@/lib/stripe/server";
@@ -11,18 +12,46 @@ import type { LicenseType } from "@/lib/constants";
 const checkoutInputSchema = z.object({
   beatLicenseId: z.string().uuid(),
   email: z.string().email().optional(),
+  acceptedTerms: z.literal(true, {
+    message: "Tu dois accepter les CGV et les conditions de licence.",
+  }),
+  termsVersion: z.string(),
+  licenseVersion: z.string(),
 });
+
+export type CreateCheckoutInput = z.infer<typeof checkoutInputSchema> & {
+  buyerIp?: string | null;
+  buyerUserAgent?: string | null;
+};
 
 export type CreateCheckoutResult =
   | { success: true; url: string }
   | { success: false; error: string };
 
 export async function createLicenseCheckout(
-  input: z.infer<typeof checkoutInputSchema>,
+  input: CreateCheckoutInput,
 ): Promise<CreateCheckoutResult> {
   const parsed = checkoutInputSchema.safeParse(input);
   if (!parsed.success) {
-    return { success: false, error: "Données invalides." };
+    return {
+      success: false,
+      error:
+        parsed.error.issues[0]?.message ?? "Données invalides.",
+    };
+  }
+
+  if (parsed.data.termsVersion !== TERMS_VERSION) {
+    return {
+      success: false,
+      error: "Les CGV ont été mises à jour. Recharge la page.",
+    };
+  }
+
+  if (parsed.data.licenseVersion !== LICENSE_VERSION) {
+    return {
+      success: false,
+      error: "Les licences ont été mises à jour. Recharge la page.",
+    };
   }
 
   const supabase = await createClient();
@@ -80,6 +109,7 @@ export async function createLicenseCheckout(
   const appUrl = getAppUrl();
   const stripe = getStripe();
   const licenseType = license.license_type as LicenseType;
+  const acceptedAt = new Date().toISOString();
 
   const session = await stripe.checkout.sessions.create({
     mode: "payment",
@@ -103,6 +133,11 @@ export async function createLicenseCheckout(
       license_type: licenseType,
       user_id: user?.id ?? "",
       customer_email: customerEmail,
+      terms_version: parsed.data.termsVersion,
+      license_version: parsed.data.licenseVersion,
+      accepted_at: acceptedAt,
+      buyer_ip: input.buyerIp ?? "",
+      buyer_user_agent: input.buyerUserAgent ?? "",
     },
     success_url: `${appUrl}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${appUrl}/beats/${beat.slug}`,

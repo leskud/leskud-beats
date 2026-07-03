@@ -98,3 +98,20 @@ body {
     background-position: -120% center;
   }
 }
+
+@media print {
+  body {
+    background: white;
+    color: black;
+  }
+
+  .license-certificate {
+    max-width: none;
+    padding: 0;
+  }
+
+  .license-certificate .rounded-xl {
+    border-color: #ccc;
+    background: white;
+  }
+}
