@@ -1,0 +1,116 @@
+import "server-only";
+import { z } from "zod";
+import { getAppUrl } from "@/lib/config/env";
+import { LICENSE_LABELS } from "@/lib/constants";
+import { getLicenseAvailability } from "@/lib/beats/licenses";
+import { createClient } from "@/lib/supabase/server";
+import { getCheckoutProductName } from "@/lib/stripe/fulfill-order";
+import { getStripe } from "@/lib/stripe/server";
+import type { LicenseType } from "@/lib/constants";
+
+const checkoutInputSchema = z.object({
+  beatLicenseId: z.string().uuid(),
+  email: z.string().email().optional(),
+});
+
+export type CreateCheckoutResult =
+  | { success: true; url: string }
+  | { success: false; error: string };
+
+export async function createLicenseCheckout(
+  input: z.infer<typeof checkoutInputSchema>,
+): Promise<CreateCheckoutResult> {
+  const parsed = checkoutInputSchema.safeParse(input);
+  if (!parsed.success) {
+    return { success: false, error: "Données invalides." };
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const customerEmail = parsed.data.email?.trim().toLowerCase() ?? user?.email;
+
+  if (!customerEmail) {
+    return {
+      success: false,
+      error: "Indique ton email pour recevoir la licence.",
+    };
+  }
+
+  const { data: license, error: licenseError } = await supabase
+    .from("beat_licenses")
+    .select(
+      "id, beat_id, license_type, price_cents, storage_path, is_available, beats!inner(id, slug, title, status)",
+    )
+    .eq("id", parsed.data.beatLicenseId)
+    .single();
+
+  if (licenseError || !license) {
+    return { success: false, error: "Licence introuvable." };
+  }
+
+  const beatRaw = license.beats as unknown;
+  const beat = (Array.isArray(beatRaw) ? beatRaw[0] : beatRaw) as {
+    id: string;
+    slug: string;
+    title: string;
+    status: string;
+  };
+
+  if (!beat?.id || beat.status !== "published") {
+    return { success: false, error: "Ce beat n'est plus disponible." };
+  }
+
+  const { data: beatLicenses } = await supabase
+    .from("beat_licenses")
+    .select("*")
+    .eq("beat_id", beat.id);
+
+  const availability = getLicenseAvailability(
+    beatLicenses ?? [],
+    license.license_type as LicenseType,
+  );
+
+  if (!availability.available || availability.licenseId !== license.id) {
+    return { success: false, error: "Cette licence n'est plus disponible." };
+  }
+
+  const appUrl = getAppUrl();
+  const stripe = getStripe();
+  const licenseType = license.license_type as LicenseType;
+
+  const session = await stripe.checkout.sessions.create({
+    mode: "payment",
+    customer_email: customerEmail,
+    line_items: [
+      {
+        price_data: {
+          currency: "eur",
+          unit_amount: license.price_cents,
+          product_data: {
+            name: getCheckoutProductName(beat.title, licenseType),
+            description: `Licence ${LICENSE_LABELS[licenseType]} — LeSkud Beats`,
+          },
+        },
+        quantity: 1,
+      },
+    ],
+    metadata: {
+      beat_license_id: license.id,
+      beat_id: beat.id,
+      license_type: licenseType,
+      user_id: user?.id ?? "",
+      customer_email: customerEmail,
+    },
+    success_url: `${appUrl}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${appUrl}/beats/${beat.slug}`,
+  });
+
+  if (!session.url) {
+    return { success: false, error: "Impossible de créer la session Stripe." };
+  }
+
+  return { success: true, url: session.url };
+}
