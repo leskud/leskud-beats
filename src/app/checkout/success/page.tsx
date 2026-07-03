@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { CheckoutWebhookPending } from "@/components/orders/checkout-webhook-pending";
 import { PurchaseDownloads } from "@/components/orders/purchase-downloads";
 import { getPaidOrderItemsBySessionId } from "@/lib/orders/session-lookup";
 import { getStripe } from "@/lib/stripe/server";
@@ -17,17 +18,41 @@ export default async function CheckoutSuccessPage({ searchParams }: Props) {
 
   if (!sessionId) notFound();
 
-  let paymentConfirmed = false;
+  const orderData = await getPaidOrderItemsBySessionId(sessionId);
+
+  if (orderData) {
+    return (
+      <div className="mx-auto max-w-lg px-4 py-16 sm:px-6">
+        <h1 className="text-3xl font-semibold">Merci pour ton achat</h1>
+        <p className="mt-2 text-sm text-muted">
+          Télécharge ta licence ci-dessous.
+        </p>
+
+        <div className="mt-8">
+          <PurchaseDownloads items={orderData.items} sessionId={sessionId} />
+        </div>
+
+        <Link
+          href="/account"
+          className="mt-8 inline-block text-sm text-gold underline-offset-2 hover:underline"
+        >
+          Voir tous mes achats
+        </Link>
+      </div>
+    );
+  }
+
+  let stripePaid = false;
 
   try {
     const stripe = getStripe();
     const session = await stripe.checkout.sessions.retrieve(sessionId);
-    paymentConfirmed = session.payment_status === "paid";
+    stripePaid = session.payment_status === "paid";
   } catch {
-    paymentConfirmed = false;
+    stripePaid = false;
   }
 
-  if (!paymentConfirmed) {
+  if (!stripePaid) {
     return (
       <div className="mx-auto max-w-lg px-4 py-20 text-center">
         <h1 className="text-2xl font-semibold">Paiement en cours</h1>
@@ -45,44 +70,5 @@ export default async function CheckoutSuccessPage({ searchParams }: Props) {
     );
   }
 
-  const orderData = await getPaidOrderItemsBySessionId(sessionId);
-
-  if (!orderData) {
-    return (
-      <div className="mx-auto max-w-lg px-4 py-20 text-center">
-        <h1 className="text-2xl font-semibold">Paiement reçu</h1>
-        <p className="mt-3 text-sm text-muted">
-          Ton achat est en cours de traitement. Rafraîchis cette page dans
-          quelques secondes pour accéder à ton téléchargement.
-        </p>
-        <Link
-          href="/account"
-          className="mt-8 inline-block text-sm text-gold underline-offset-2 hover:underline"
-        >
-          Mes achats
-        </Link>
-      </div>
-    );
-  }
-
-  return (
-    <div className="mx-auto max-w-lg px-4 py-16 sm:px-6">
-      <h1 className="text-3xl font-semibold">Merci pour ton achat</h1>
-      <p className="mt-2 text-sm text-muted">
-        Télécharge ta licence ci-dessous. Un email de confirmation a été envoyé
-        à {orderData.order.email}.
-      </p>
-
-      <div className="mt-8">
-        <PurchaseDownloads items={orderData.items} sessionId={sessionId} />
-      </div>
-
-      <Link
-        href="/account"
-        className="mt-8 inline-block text-sm text-gold underline-offset-2 hover:underline"
-      >
-        Voir tous mes achats
-      </Link>
-    </div>
-  );
+  return <CheckoutWebhookPending sessionId={sessionId} />;
 }

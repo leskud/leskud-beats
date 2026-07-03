@@ -1,8 +1,8 @@
 import "server-only";
 import {
   LICENSE_LABELS,
-  SIGNED_URL_EXPIRY_SECONDS,
   STORAGE_BUCKETS,
+  type LicenseType,
 } from "@/lib/constants";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
@@ -19,7 +19,6 @@ type OrderItemRow = {
   license_type: string;
   beat_title: string;
   download_count: number;
-  max_downloads: number;
   beat_license_id: string;
   orders: {
     id: string;
@@ -31,7 +30,12 @@ type OrderItemRow = {
 };
 
 export type PaidDownloadResult =
-  | { success: true; signedUrl: string; filename: string; remaining: number }
+  | {
+      success: true;
+      buffer: Buffer;
+      filename: string;
+      contentType: string;
+    }
   | { success: false; error: string; status: number };
 
 function normalizeOrderItemRow(item: Record<string, unknown>): OrderItemRow {
@@ -44,12 +48,33 @@ function normalizeOrderItemRow(item: Record<string, unknown>): OrderItemRow {
   };
 }
 
+export function buildPaidDownloadFilename(
+  beatTitle: string,
+  licenseType: LicenseType,
+  storagePath: string,
+): string {
+  const slug =
+    beatTitle
+      .trim()
+      .replace(/\s+/g, "-")
+      .replace(/[^a-zA-Z0-9-_]+/g, "") || "beat";
+  const label = LICENSE_LABELS[licenseType];
+  const ext = storagePath.split(".").pop()?.toLowerCase() ?? "file";
+  return `LeSkud-${slug}-${label}.${ext}`;
+}
+
+function contentTypeForPath(storagePath: string): string {
+  const ext = storagePath.split(".").pop()?.toLowerCase();
+  if (ext === "zip") return "application/zip";
+  return "application/octet-stream";
+}
+
 async function loadOrderItem(
   orderItemId: string,
   sessionId?: string | null,
 ): Promise<{ item: OrderItemRow | null; denied: boolean }> {
   const selectQuery =
-    "id, order_id, beat_id, license_type, beat_title, download_count, max_downloads, beat_license_id, orders!inner(id, email, status, stripe_checkout_session_id, user_id)";
+    "id, order_id, beat_id, license_type, beat_title, download_count, beat_license_id, orders!inner(id, email, status, stripe_checkout_session_id, user_id)";
 
   if (sessionId) {
     const service = createServiceClient();
@@ -118,14 +143,6 @@ export async function createPaidDownload(
     return { success: false, error: "Commande non payée.", status: 403 };
   }
 
-  if (item.download_count >= item.max_downloads) {
-    return {
-      success: false,
-      error: "Limite de téléchargements atteinte (5 max).",
-      status: 403,
-    };
-  }
-
   const service = createServiceClient();
 
   const { data: license } = await service
@@ -138,49 +155,30 @@ export async function createPaidDownload(
     return { success: false, error: "Fichier indisponible.", status: 404 };
   }
 
-  const { data: incrementRows, error: incrementError } = await service.rpc(
-    "increment_order_item_download",
-    { p_order_item_id: params.orderItemId },
-  );
-
-  const increment = incrementRows?.[0] as
-    | { ok: boolean; download_count: number; max_downloads: number }
-    | undefined;
-
-  if (incrementError || !increment?.ok) {
-    return {
-      success: false,
-      error: "Limite de téléchargements atteinte (5 max).",
-      status: 403,
-    };
-  }
-
-  const { data: signed, error: signError } = await service.storage
+  const { data: file, error: downloadError } = await service.storage
     .from(STORAGE_BUCKETS.beats)
-    .createSignedUrl(license.storage_path, SIGNED_URL_EXPIRY_SECONDS);
+    .download(license.storage_path);
 
-  if (signError || !signed?.signedUrl) {
-    return {
-      success: false,
-      error: "Impossible de générer le lien de téléchargement.",
-      status: 500,
-    };
+  if (downloadError || !file) {
+    return { success: false, error: "Fichier introuvable.", status: 404 };
   }
 
-  const ext = license.storage_path.split(".").pop()?.toLowerCase() ?? "file";
-  const slug = item.beat_title
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-|-$)/g, "");
-  const label =
-    LICENSE_LABELS[item.license_type as keyof typeof LICENSE_LABELS] ??
-    item.license_type;
-  const filename = `${slug}-${label}.${ext}`;
+  await service
+    .from("order_items")
+    .update({ download_count: item.download_count + 1 })
+    .eq("id", params.orderItemId);
+
+  const buffer = Buffer.from(await file.arrayBuffer());
+  const filename = buildPaidDownloadFilename(
+    item.beat_title,
+    item.license_type as LicenseType,
+    license.storage_path,
+  );
 
   return {
     success: true,
-    signedUrl: signed.signedUrl,
+    buffer,
     filename,
-    remaining: increment.max_downloads - increment.download_count,
+    contentType: contentTypeForPath(license.storage_path),
   };
 }
