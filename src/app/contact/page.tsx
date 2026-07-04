@@ -1,109 +1,40 @@
-import Link from "next/link";
 import { CONTACT_EMAIL } from "@/lib/constants";
 
 export const metadata = {
   title: "Contact",
 };
 
-function ContactBlock({
-  title,
-  description,
-  mailtoHref,
-  buttonLabel,
-}: {
-  title: string;
-  description: string;
-  mailtoHref: string;
-  buttonLabel: string;
-}) {
-  return (
-    <section className="rounded-xl border border-border bg-surface p-6">
-      <h2 className="text-lg font-medium text-gold">{title}</h2>
-      <p className="mt-2 text-sm text-muted">{description}</p>
-      <a
-        href={mailtoHref}
-        className="mt-4 inline-flex h-10 items-center justify-center rounded-lg border border-gold/40 px-4 text-sm text-gold transition-colors hover:bg-gold/10"
-      >
-        {buttonLabel}
-      </a>
-    </section>
-  );
-}
+const MAILTO_HREF = `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent("Contact LeSkud Beats")}`;
 
 export default function ContactPage() {
-  const supportMailto = `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent("Support achat LeSkud Beats")}&body=${encodeURIComponent("Bonjour LeSkud,\n\nJ'ai un problème avec mon achat :\n\nEmail utilisé : …\nBeat concerné : …\nDescription : …\n\nCordialement,")}`;
-
-  const customLicenseMailto = `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent("Demande licence personnalisée")}&body=${encodeURIComponent("Bonjour LeSkud,\n\nJe souhaite discuter d'une licence personnalisée.\n\nMon nom d'artiste : …\nMon projet : …\n\nCordialement,")}`;
-
-  const otherMailto = `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent("Autre demande LeSkud Beats")}&body=${encodeURIComponent("Bonjour LeSkud,\n\nMon nom / nom d'artiste : …\nMon message : …\n\nCordialement,")}`;
-
   return (
-    <div className="mx-auto max-w-3xl px-4 py-16 sm:px-6 lg:px-8">
-      <h1 className="text-3xl font-semibold">Contact</h1>
-      <p className="mt-3 text-muted">
-        Une question sur une licence ou un achat ? Écris-nous directement.
-      </p>
+    <div className="mx-auto flex min-h-[60vh] max-w-lg flex-col justify-center px-4 py-16 sm:px-6">
+      <div className="rounded-xl border border-border bg-surface p-8 text-center sm:p-10">
+        <h1 className="text-3xl font-semibold">Contact</h1>
 
-      <p className="mt-6 text-sm">
-        Email :{" "}
-        <a
-          href={`mailto:${CONTACT_EMAIL}`}
-          className="text-gold underline-offset-2 hover:underline"
-        >
-          {CONTACT_EMAIL}
-        </a>
-      </p>
-
-      <div className="mt-10 space-y-4">
-        <ContactBlock
-          title="Problème avec un achat"
-          description="Fichier manquant, erreur de téléchargement ou question sur ta commande."
-          mailtoHref={supportMailto}
-          buttonLabel="Contacter le support"
-        />
-
-        <ContactBlock
-          title="Licence personnalisée"
-          description="Besoin d'un usage spécifique (pub, synchro, upgrade) ? Contacte-nous."
-          mailtoHref={customLicenseMailto}
-          buttonLabel="Demander une licence sur mesure"
-        />
-
-        <ContactBlock
-          title="Autre demande"
-          description="Partenariat, question générale ou autre sujet."
-          mailtoHref={otherMailto}
-          buttonLabel="Nous écrire"
-        />
-      </div>
-
-      <section className="mt-10 rounded-xl border border-border bg-surface p-6">
-        <h2 className="text-lg font-medium">Formulaire rapide</h2>
-        <p className="mt-2 text-sm text-muted">
-          Pour le lancement, utilise les boutons ci-dessus (email pré-rempli).
-          Tu peux aussi nous écrire directement avec :
+        <p className="mt-4 text-sm leading-relaxed text-muted sm:text-base">
+          Une question sur une prod, une licence ou un achat ? Tu peux me
+          contacter directement par email.
         </p>
-        <ul className="mt-3 space-y-1 text-sm text-muted">
-          <li>· Nom / nom d&apos;artiste</li>
-          <li>· Email</li>
-          <li>· Sujet (achat, support, licence, autre)</li>
-          <li>· Beat concerné (optionnel)</li>
-          <li>· Message</li>
-        </ul>
-        <a
-          href={`mailto:${CONTACT_EMAIL}`}
-          className="mt-4 inline-flex text-sm text-gold underline-offset-2 hover:underline"
-        >
-          Ouvrir mon client mail
-        </a>
-      </section>
 
-      <Link
-        href="/"
-        className="mt-10 inline-block text-sm text-gold underline-offset-2 hover:underline"
-      >
-        ← Retour à l&apos;accueil
-      </Link>
+        <p className="mt-8">
+          <a
+            href={`mailto:${CONTACT_EMAIL}`}
+            className="text-lg font-medium text-gold underline-offset-4 hover:underline"
+          >
+            {CONTACT_EMAIL}
+          </a>
+        </p>
+
+        <a
+          href={MAILTO_HREF}
+          className="mt-8 inline-flex h-11 items-center justify-center rounded-lg bg-gold px-6 text-sm font-medium text-background transition-colors hover:bg-gold-muted"
+        >
+          Envoyer un email
+        </a>
+
+        <p className="mt-6 text-xs text-muted">Je réponds dès que possible.</p>
+      </div>
     </div>
   );
 }
