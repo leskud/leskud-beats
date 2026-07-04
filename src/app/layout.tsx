@@ -33,8 +33,8 @@ export default function RootLayout({
   return (
     <html lang="fr" className={`${inter.variable} ${barlowCondensed.variable} h-full`}>
       <body className="flex min-h-full flex-col antialiased">
-        <Header />
         <AppShell>
+          <Header />
           <main className="flex-1">{children}</main>
           <Footer />
         </AppShell>

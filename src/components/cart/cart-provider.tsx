@@ -81,3 +81,18 @@ export function useCart() {
   }
   return context;
 }
+
+/** Fallback safe pour composants pouvant être hors provider (ne pas utiliser en prod normale). */
+export function useCartSafe() {
+  const context = useContext(CartContext);
+  return (
+    context ?? {
+      items: [],
+      itemCount: 0,
+      addItem: () => {},
+      removeItem: () => {},
+      clearCart: () => {},
+      isHydrated: true,
+    }
+  );
+}

@@ -10,7 +10,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <PlayerProvider>
       <CartProvider>
         <FreeDownloadProvider>
-          <div className="pb-24">{children}</div>
+          <div className="flex min-h-full flex-1 flex-col pb-24">{children}</div>
           <GlobalPlayer />
         </FreeDownloadProvider>
       </CartProvider>

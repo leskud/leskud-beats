@@ -1,6 +1,21 @@
 import type { CartLineItem, CartState } from "@/lib/cart/types";
 import { CART_STORAGE_KEY } from "@/lib/cart/types";
 
+function isValidCartItem(item: unknown): item is CartLineItem {
+  if (!item || typeof item !== "object") return false;
+  const row = item as Record<string, unknown>;
+  return (
+    typeof row.beatLicenseId === "string" &&
+    typeof row.beatId === "string" &&
+    typeof row.beatSlug === "string" &&
+    typeof row.beatTitle === "string" &&
+    typeof row.licenseType === "string" &&
+    typeof row.licenseLabel === "string" &&
+    typeof row.priceCents === "number" &&
+    !Number.isNaN(row.priceCents)
+  );
+}
+
 export function readCartFromStorage(): CartState {
   if (typeof window === "undefined") return { items: [] };
 
@@ -8,18 +23,30 @@ export function readCartFromStorage(): CartState {
     const raw = window.localStorage.getItem(CART_STORAGE_KEY);
     if (!raw) return { items: [] };
 
-    const parsed = JSON.parse(raw) as CartState;
-    if (!Array.isArray(parsed.items)) return { items: [] };
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object") {
+      window.localStorage.removeItem(CART_STORAGE_KEY);
+      return { items: [] };
+    }
 
-    return {
-      items: parsed.items.filter(
-        (item) =>
-          item &&
-          typeof item.beatLicenseId === "string" &&
-          typeof item.beatId === "string",
-      ),
-    };
+    const items = (parsed as CartState).items;
+    if (!Array.isArray(items)) {
+      window.localStorage.removeItem(CART_STORAGE_KEY);
+      return { items: [] };
+    }
+
+    const validItems = items.filter(isValidCartItem);
+    if (validItems.length !== items.length) {
+      writeCartToStorage({ items: validItems });
+    }
+
+    return { items: validItems };
   } catch {
+    try {
+      window.localStorage.removeItem(CART_STORAGE_KEY);
+    } catch {
+      // ignore
+    }
     return { items: [] };
   }
 }
