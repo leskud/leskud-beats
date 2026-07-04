@@ -31,8 +31,25 @@ export async function POST(request: Request) {
       );
     }
 
+    const items = Array.isArray(body.items)
+      ? body.items
+          .filter(
+            (entry): entry is { beatLicenseId: string } =>
+              Boolean(
+                entry &&
+                  typeof entry === "object" &&
+                  typeof (entry as { beatLicenseId?: string }).beatLicenseId ===
+                    "string",
+              ),
+          )
+          .map((entry) => ({ beatLicenseId: entry.beatLicenseId }))
+      : undefined;
+
     const result = await createLicenseCheckout({
-      beatLicenseId: String(body.beatLicenseId ?? ""),
+      beatLicenseId: body.beatLicenseId
+        ? String(body.beatLicenseId)
+        : undefined,
+      items,
       email: body.email ? String(body.email) : undefined,
       acceptedTerms: true,
       acceptedImmediateAccess: true,

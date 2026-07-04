@@ -96,6 +96,10 @@ export default async function BeatDetailPage({ params }: Props) {
           beatLicenses={beat.beat_licenses ?? []}
           userEmail={user?.email}
           beatStatus={beat.status}
+          beatId={beat.id}
+          beatSlug={beat.slug}
+          beatTitle={beat.title}
+          coverPath={beat.cover_path}
         />
       </div>
     </div>

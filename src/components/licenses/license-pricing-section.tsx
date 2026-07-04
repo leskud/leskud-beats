@@ -2,13 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import {
-  LicenseAcceptanceCheckbox,
-  LICENSE_VERSION,
-  TERMS_VERSION,
-} from "@/components/licenses/license-acceptance-checkbox";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { useCart } from "@/components/cart/cart-provider";
 import { getLicenseAvailability, type LicenseAvailability } from "@/lib/beats/licenses";
 import { LICENSE_DISPLAY_ORDER } from "@/lib/constants";
 import type { PublicCheckoutLicenseType } from "@/lib/constants";
@@ -30,7 +24,10 @@ type LicensePricingSectionProps = {
   beatLicenses?: BeatLicense[];
   userEmail?: string | null;
   beatStatus?: BeatStatus;
+  beatId?: string;
+  beatSlug?: string;
   beatTitle?: string;
+  coverPath?: string | null;
 };
 
 function getAvailabilityMap(
@@ -45,17 +42,14 @@ function getAvailabilityMap(
 export function LicensePricingSection({
   mode,
   beatLicenses = [],
-  userEmail,
   beatStatus,
+  beatId = "",
+  beatSlug = "",
+  beatTitle = "ce beat",
+  coverPath = null,
 }: LicensePricingSectionProps) {
-  const [selectedType, setSelectedType] = useState<PublicCheckoutLicenseType | null>(
-    null,
-  );
-  const [acceptedTerms, setAcceptedTerms] = useState(false);
-  const [acceptedImmediateAccess, setAcceptedImmediateAccess] = useState(false);
-  const [email, setEmail] = useState(userEmail ?? "");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { addItem } = useCart();
+  const [cartFeedback, setCartFeedback] = useState<string | null>(null);
 
   const availabilityRows = useMemo(() => {
     return LICENSE_DISPLAY_ORDER.map((type) => {
@@ -75,60 +69,37 @@ export function LicensePricingSection({
 
   const availabilityMap = getAvailabilityMap(beatLicenses, availabilityRows);
 
-  const acceptanceComplete = acceptedTerms && acceptedImmediateAccess;
-
-  async function handleBuy(licenseType: PublicCheckoutLicenseType) {
-    setError(null);
-
+  function handleAddToCart(licenseType: PublicCheckoutLicenseType) {
     const availability = availabilityMap.get(licenseType);
-    if (!availability?.licenseId) return;
+    const definition = getLicenseDefinition(licenseType)!;
 
-    if (!acceptanceComplete) {
-      setError("Tu dois accepter les deux conditions avant le paiement.");
-      return;
-    }
+    if (!availability?.licenseId || !availability.available) return;
 
-    const checkoutEmail = userEmail ?? email.trim();
-    if (!checkoutEmail) {
-      setError("Indique ton email pour continuer.");
-      return;
-    }
+    const entitledFiles = getEntitledFileTypes(licenseType, beatLicenses).map(
+      (fileType) => DOWNLOAD_FILE_LABELS[fileType],
+    );
 
-    setLoading(true);
+    addItem({
+      beatLicenseId: availability.licenseId,
+      beatId,
+      beatSlug,
+      beatTitle,
+      coverPath,
+      licenseType,
+      licenseLabel: definition.commercialName,
+      priceCents: availability.priceCents ?? definition.priceCents ?? 0,
+      filesIncluded:
+        entitledFiles.length > 0 ? entitledFiles : definition.filesIncluded,
+      addedAt: new Date().toISOString(),
+    });
 
-    try {
-      const response = await fetch("/api/stripe/checkout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          beatLicenseId: availability.licenseId,
-          email: userEmail ? undefined : checkoutEmail,
-          acceptedTerms: true,
-          acceptedImmediateAccess: true,
-          termsVersion: TERMS_VERSION,
-          licenseVersion: LICENSE_VERSION,
-        }),
-      });
-
-      const data = (await response.json()) as { url?: string; error?: string };
-
-      if (!response.ok || !data.url) {
-        setError(data.error ?? "Impossible de démarrer le paiement.");
-        return;
-      }
-
-      window.location.href = data.url;
-    } catch {
-      setError("Erreur réseau. Réessayez.");
-    } finally {
-      setLoading(false);
-    }
+    setCartFeedback(definition.commercialName);
+    window.setTimeout(() => setCartFeedback(null), 5000);
   }
 
   function renderActionButton(
     definition: (typeof PUBLIC_LICENSE_DEFINITIONS)[number],
     availability: LicenseAvailability | undefined,
-    isSelected: boolean,
   ) {
     if (mode === "home") {
       return (
@@ -151,14 +122,13 @@ export function LicensePricingSection({
 
     if (availability?.available && availability.licenseId) {
       return (
-        <Button
+        <button
           type="button"
-          variant={isSelected ? "primary" : "outline"}
-          className="w-full text-sm"
-          onClick={() => setSelectedType(definition.type)}
+          className="inline-flex h-9 w-full items-center justify-center rounded-lg border border-gold/40 text-sm text-gold transition-colors hover:bg-gold/10"
+          onClick={() => handleAddToCart(definition.type)}
         >
-          Choisir cette licence
-        </Button>
+          Ajouter au panier
+        </button>
       );
     }
 
@@ -177,9 +147,31 @@ export function LicensePricingSection({
           Quatre licences non-exclusives pour sortir ta musique.
           {mode === "home"
             ? " Consulte le détail complet avant d'acheter."
-            : " Choisis ta licence et finalise ton achat."}
+            : " Ajoute ta licence au panier pour finaliser ton achat."}
         </p>
       </div>
+
+      {cartFeedback ? (
+        <div className="mb-6 rounded-xl border border-gold/30 bg-gold/10 p-4 text-sm">
+          <p className="font-medium text-gold">
+            Licence ajoutée au panier — {cartFeedback}
+          </p>
+          <div className="mt-3 flex flex-wrap gap-3">
+            <Link
+              href="/cart"
+              className="text-gold underline-offset-2 hover:underline"
+            >
+              Voir le panier
+            </Link>
+            <Link
+              href="/#catalogue"
+              className="text-muted underline-offset-2 hover:underline"
+            >
+              Continuer mes achats
+            </Link>
+          </div>
+        </div>
+      ) : null}
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {PUBLIC_LICENSE_DEFINITIONS.map((definition) => {
@@ -193,18 +185,13 @@ export function LicensePricingSection({
                   (fileType) => DOWNLOAD_FILE_LABELS[fileType],
                 )
               : definition.filesIncluded;
-          const isSelected = selectedType === definition.type;
 
           return (
             <article
               key={definition.type}
               className={cn(
                 "flex flex-col rounded-xl border bg-surface p-5 transition-colors",
-                isSelected
-                  ? "border-gold/60 ring-1 ring-gold/30"
-                  : isHighlighted
-                    ? "border-gold/30"
-                    : "border-border",
+                isHighlighted ? "border-gold/30" : "border-border",
                 !isCheckoutable && mode === "beat" && "opacity-80",
               )}
             >
@@ -237,49 +224,12 @@ export function LicensePricingSection({
               </ul>
 
               <div className="mt-5">
-                {renderActionButton(definition, availability, isSelected)}
+                {renderActionButton(definition, availability)}
               </div>
             </article>
           );
         })}
       </div>
-
-      {mode === "beat" &&
-      selectedType &&
-      availabilityMap.get(selectedType)?.licenseId ? (
-        <div className="mt-8 max-w-xl space-y-4 rounded-xl border border-border bg-surface p-6">
-          {!userEmail ? (
-            <Input
-              type="email"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              placeholder="ton@email.com"
-              required
-            />
-          ) : null}
-
-          <LicenseAcceptanceCheckbox
-            acceptedTerms={acceptedTerms}
-            acceptedImmediateAccess={acceptedImmediateAccess}
-            onAcceptedTermsChange={setAcceptedTerms}
-            onAcceptedImmediateAccessChange={setAcceptedImmediateAccess}
-          />
-
-          <Button
-            type="button"
-            variant="primary"
-            disabled={loading || !acceptanceComplete}
-            className="w-full"
-            onClick={() => void handleBuy(selectedType)}
-          >
-            {loading
-              ? "Redirection…"
-              : `Acheter · ${formatLicensePriceDisplay(getLicenseDefinition(selectedType)!)}`}
-          </Button>
-
-          {error ? <p className="text-sm text-red-300">{error}</p> : null}
-        </div>
-      ) : null}
     </section>
   );
 }

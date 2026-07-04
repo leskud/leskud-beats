@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { CartClearOnSuccess } from "@/components/cart/cart-clear-on-success";
 import { CheckoutWebhookPending } from "@/components/orders/checkout-webhook-pending";
 import { PurchaseDownloads } from "@/components/orders/purchase-downloads";
 import { getPaidOrderItemsBySessionId } from "@/lib/orders/session-lookup";
@@ -23,6 +24,7 @@ export default async function CheckoutSuccessPage({ searchParams }: Props) {
   if (orderData) {
     return (
       <div className="mx-auto max-w-lg px-4 py-16 sm:px-6">
+        <CartClearOnSuccess />
         <h1 className="text-3xl font-semibold">Merci pour ton achat</h1>
         <p className="mt-2 text-sm text-muted">
           Télécharge tes fichiers et consulte ta licence ci-dessous.

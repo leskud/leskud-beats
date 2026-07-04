@@ -1,14 +1,17 @@
+"use client";
+
 import Link from "next/link";
-import { CONTACT_EMAIL, LICENSE_LABELS, PRODUCER_NAME } from "@/lib/constants";
-import type { LicenseType } from "@/lib/constants";
+import { CONTACT_EMAIL, PRODUCER_NAME } from "@/lib/constants";
 import { PROPERTY_NOTICE } from "@/lib/legal/license-definitions";
-import { LICENSE_VERSION } from "@/lib/legal/versions";
 import type { LicenseCertificateData } from "@/lib/orders/license-access";
+import {
+  formatCertificateDate,
+  formatCertificatePrice,
+} from "@/lib/orders/certificate-format";
 import {
   buildDownloadHref,
 } from "@/lib/orders/purchase-display";
 import type { DownloadFileType } from "@/lib/orders/download-entitlements";
-import { formatPrice } from "@/lib/utils";
 
 type LicenseCertificateProps = {
   data: LicenseCertificateData;
@@ -23,7 +26,8 @@ export function LicenseCertificate({
 }: LicenseCertificateProps) {
   const { orderItem, order, definition } = data;
   const purchaseDate = order.paid_at ?? order.created_at;
-  const effectiveDate = purchaseDate;
+  const licenseVersion = order.license_version ?? "Non renseigné";
+  const termsVersion = order.terms_version ?? "Non renseigné";
 
   return (
     <div className="license-certificate mx-auto max-w-3xl px-4 py-12 sm:px-6 lg:px-8">
@@ -34,7 +38,9 @@ export function LicenseCertificate({
           <p className="mt-2 text-sm text-muted">
             Document récapitulatif de ta licence d&apos;utilisation.
           </p>
-          <p className="mt-1 text-xs text-muted">Version licence : {LICENSE_VERSION}</p>
+          <p className="mt-1 text-xs text-muted">
+            Version licence : {licenseVersion}
+          </p>
         </div>
         <button
           type="button"
@@ -61,16 +67,11 @@ export function LicenseCertificate({
             </div>
             <div>
               <dt className="text-muted">Client / Licencié</dt>
-              <dd>{order.email}</dd>
+              <dd>{order.email || "Non renseigné"}</dd>
             </div>
             <div>
-              <dt className="text-muted">Date d&apos;effet</dt>
-              <dd>
-                {new Date(effectiveDate).toLocaleString("fr-FR", {
-                  dateStyle: "long",
-                  timeStyle: "short",
-                })}
-              </dd>
+              <dt className="text-muted">Date d&apos;achat</dt>
+              <dd>{formatCertificateDate(purchaseDate)}</dd>
             </div>
           </dl>
         </section>
@@ -82,17 +83,17 @@ export function LicenseCertificate({
           <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
             <div>
               <dt className="text-muted">Beat</dt>
-              <dd className="font-medium">{orderItem.beat_title}</dd>
-            </div>
-            <div>
-              <dt className="text-muted">Licence</dt>
               <dd className="font-medium">
-                {LICENSE_LABELS[orderItem.license_type as LicenseType]}
+                {orderItem.beat_title || "Non renseigné"}
               </dd>
             </div>
             <div>
+              <dt className="text-muted">Licence</dt>
+              <dd className="font-medium">{definition.commercialName}</dd>
+            </div>
+            <div>
               <dt className="text-muted">Prix payé TTC</dt>
-              <dd>{formatPrice(orderItem.price_cents)}</dd>
+              <dd>{formatCertificatePrice(orderItem.price_cents)}</dd>
             </div>
             <div>
               <dt className="text-muted">Référence commande</dt>
@@ -110,27 +111,19 @@ export function LicenseCertificate({
           <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
             <div>
               <dt className="text-muted">CGV (version)</dt>
-              <dd>{order.terms_version ?? "—"}</dd>
+              <dd>{termsVersion}</dd>
             </div>
             <div>
               <dt className="text-muted">Licence (version)</dt>
-              <dd>{order.license_version ?? "—"}</dd>
+              <dd>{licenseVersion}</dd>
             </div>
             <div>
               <dt className="text-muted">CGV acceptées le</dt>
-              <dd>
-                {order.accepted_terms_at
-                  ? new Date(order.accepted_terms_at).toLocaleString("fr-FR")
-                  : "—"}
-              </dd>
+              <dd>{formatCertificateDate(order.accepted_terms_at)}</dd>
             </div>
             <div>
-              <dt className="text-muted">Accès immédiat accepté le</dt>
-              <dd>
-                {order.accepted_license_at
-                  ? new Date(order.accepted_license_at).toLocaleString("fr-FR")
-                  : "—"}
-              </dd>
+              <dt className="text-muted">Livraison immédiate acceptée le</dt>
+              <dd>{formatCertificateDate(order.accepted_license_at)}</dd>
             </div>
           </dl>
         </section>
@@ -140,7 +133,9 @@ export function LicenseCertificate({
             Fichiers inclus
           </h2>
           <p className="mt-3 text-sm text-muted">
-            {files.map((file) => file.label).join(" · ") || "—"}
+            {files.length > 0
+              ? files.map((file) => file.label).join(" · ")
+              : definition.filesIncluded.join(" · ") || "Non renseigné"}
           </p>
         </section>
 

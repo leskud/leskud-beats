@@ -1,6 +1,6 @@
 import Link from "next/link";
-import { ShoppingBag } from "lucide-react";
 import { UserMenu } from "@/components/auth/user-menu";
+import { CartHeaderLink } from "@/components/cart/cart-header-link";
 import { LeskudLogo } from "@/components/brand/leskud-logo";
 import { YoutubeLink } from "@/components/brand/youtube-link";
 import { YOUTUBE_CHANNEL_URL } from "@/lib/constants";
@@ -40,13 +40,7 @@ export async function Header() {
             className="md:hidden"
           />
 
-          <Link
-            href="/cart"
-            className="rounded-lg p-2 text-muted transition-colors hover:bg-surface hover:text-foreground"
-            aria-label="Panier"
-          >
-            <ShoppingBag className="h-5 w-5" />
-          </Link>
+          <CartHeaderLink />
 
           {user ? (
             <UserMenu email={user.email ?? ""} isAdmin={profile?.is_admin} />

@@ -180,6 +180,26 @@ export function getLicenseDefinition(
   return LICENSE_DEFINITIONS.find((definition) => definition.type === type);
 }
 
+/** Définition de repli pour certificats legacy ou types inconnus */
+export function getLicenseDefinitionOrFallback(
+  type: LicenseType,
+): LicenseDefinition {
+  const definition = getLicenseDefinition(type);
+  if (definition) return definition;
+
+  return {
+    type,
+    commercialName: LICENSE_LABELS[type] ?? type,
+    priceCents: null,
+    pricingMode: "fixed",
+    filesIncluded: [],
+    rights: ["Usage selon les conditions acceptées au moment de l'achat."],
+    limits: ["Voir les conditions de la version de licence en vigueur."],
+    restrictions: COMMON_RESTRICTIONS,
+    credit: "prod. LeSkud",
+  };
+}
+
 export function formatLicensePriceDisplay(definition: LicenseDefinition): string {
   if (definition.pricingMode === "on_request") {
     return definition.priceDisplay ?? EXCLUSIVE_ON_REQUEST_LABEL;
