@@ -98,6 +98,10 @@ export function BeatEditForm({ beat }: BeatEditFormProps) {
         formData.set("uploadedStemsPath", uploadedPaths.stems);
       }
 
+      if (!formData.get("regeneratePreview") || uploadedPaths.mp3) {
+        formData.delete("regeneratePreview");
+      }
+
       setStatusMessage("Enregistrement des métadonnées…");
 
       const response = await fetch(`/api/admin/beats/${beat.id}`, {
@@ -108,6 +112,7 @@ export function BeatEditForm({ beat }: BeatEditFormProps) {
       const data = (await response.json().catch(() => null)) as {
         error?: string;
         previewWarning?: string | null;
+        successMessage?: string | null;
       } | null;
 
       if (!response.ok || data?.error) {
@@ -115,12 +120,20 @@ export function BeatEditForm({ beat }: BeatEditFormProps) {
         return;
       }
 
+      const successText =
+        data?.successMessage ??
+        (uploadedPaths.stems && !uploadedPaths.mp3 && !uploadedPaths.wav
+          ? "Stems mis à jour."
+          : "Upload terminé — beat mis à jour.");
+
       if (data?.previewWarning) {
-        setStatusMessage(data.previewWarning);
+        setStatusMessage(`${successText} ${data.previewWarning}`);
+        router.push("/admin");
+        router.refresh();
         return;
       }
 
-      setStatusMessage("Upload terminé — beat mis à jour.");
+      setStatusMessage(successText);
       router.push("/admin");
       router.refresh();
     } catch (uploadError) {
@@ -343,9 +356,8 @@ export function BeatEditForm({ beat }: BeatEditFormProps) {
             type="checkbox"
             name="regeneratePreview"
             value="true"
-            defaultChecked
           />
-          Régénérer la preview filigranée (sans re-uploader le MP3)
+          Régénérer la preview filigranée depuis le MP3 existant (sans re-uploader le MP3)
         </label>
         <div className="grid gap-4 sm:grid-cols-2">
           <Input name="cover" type="file" accept="image/*" />

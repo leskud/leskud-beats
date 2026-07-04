@@ -29,6 +29,7 @@ const serverEnvSchema = z
     R2_BUCKET_NAME: z.string().min(1).optional(),
     R2_ENDPOINT: z.string().url().optional(),
     R2_REGION: z.string().min(1).optional(),
+    PREVIEW_GENERATION_ENABLED: z.string().optional(),
   })
   .superRefine((env, ctx) => {
     if (isProduction) {
@@ -126,6 +127,7 @@ function readRawEnv(): ServerEnv {
     R2_BUCKET_NAME: process.env.R2_BUCKET_NAME,
     R2_ENDPOINT: process.env.R2_ENDPOINT,
     R2_REGION: process.env.R2_REGION,
+    PREVIEW_GENERATION_ENABLED: process.env.PREVIEW_GENERATION_ENABLED,
   });
 }
 
@@ -243,4 +245,12 @@ export function isR2Configured(): boolean {
       env.R2_BUCKET_NAME &&
       env.R2_ENDPOINT,
   );
+}
+
+/** Désactiver avec PREVIEW_GENERATION_ENABLED=false (recommandé sur Vercel si FFmpeg indisponible). */
+export function isPreviewGenerationEnabled(): boolean {
+  const raw = process.env.PREVIEW_GENERATION_ENABLED;
+  if (raw === undefined || raw.trim() === "") return true;
+  const normalized = raw.trim().toLowerCase();
+  return normalized !== "false" && normalized !== "0" && normalized !== "no";
 }

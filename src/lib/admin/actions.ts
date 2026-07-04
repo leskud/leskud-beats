@@ -19,6 +19,7 @@ import {
   generateWatermarkedPreview,
   getWatermarkTagPath,
 } from "@/lib/audio/watermark";
+import { isPreviewGenerationEnabled } from "@/lib/config/env";
 import { downloadR2ObjectBuffer } from "@/lib/storage/r2-presign";
 import {
   normalizeStorageProvider,
@@ -139,18 +140,24 @@ type ApplyMp3Result = {
   previewWarning: string | null;
 };
 
-async function applyMp3Upload(
+const PREVIEW_SKIPPED_MESSAGE =
+  "Fichier enregistré, mais preview non générée automatiquement.";
+
+async function generatePreviewFromMp3Buffer(
   supabase: AdminSupabase,
   beatId: string,
-  mp3Path: string,
-  keepUnavailable = false,
+  mp3Buffer: Buffer,
 ): Promise<ApplyMp3Result> {
+  if (!isPreviewGenerationEnabled()) {
+    return {
+      previewPath: null,
+      previewWarning: `${PREVIEW_SKIPPED_MESSAGE} (génération désactivée sur ce serveur.)`,
+    };
+  }
+
   const previewTarget = `${beatId}/preview.mp3`;
-  let previewPath: string | null = null;
-  let previewWarning: string | null = null;
 
   try {
-    const mp3Buffer = await downloadR2ObjectBuffer(mp3Path);
     const previewBuffer = await generateWatermarkedPreview(
       mp3Buffer,
       getWatermarkTagPath(),
@@ -162,43 +169,69 @@ async function applyMp3Upload(
       previewBuffer,
       "audio/mpeg",
     );
-    previewPath = previewTarget;
+    return { previewPath: previewTarget, previewWarning: null };
   } catch (error) {
-    previewWarning =
-      error instanceof Error
-        ? `Preview non générée : ${error.message}. Le MP3 payant est enregistré sur R2. Vous pourrez régénérer la preview ou uploader une preview manuelle plus tard.`
-        : "Preview non générée. Le MP3 payant est enregistré sur R2.";
+    return {
+      previewPath: null,
+      previewWarning:
+        error instanceof Error
+          ? `${PREVIEW_SKIPPED_MESSAGE} (${error.message})`
+          : PREVIEW_SKIPPED_MESSAGE,
+    };
   }
+}
 
+async function applyMp3Upload(
+  supabase: AdminSupabase,
+  beatId: string,
+  mp3Path: string,
+  keepUnavailable = false,
+): Promise<ApplyMp3Result> {
   await supabase
     .from("beat_licenses")
     .update(paidLicensePatch(mp3Path, keepUnavailable))
     .eq("beat_id", beatId)
     .eq("license_type", "mp3");
 
-  return { previewPath, previewWarning };
+  try {
+    const mp3Buffer = await downloadR2ObjectBuffer(mp3Path);
+    return await generatePreviewFromMp3Buffer(supabase, beatId, mp3Buffer);
+  } catch (error) {
+    return {
+      previewPath: null,
+      previewWarning:
+        error instanceof Error
+          ? `${PREVIEW_SKIPPED_MESSAGE} (${error.message})`
+          : PREVIEW_SKIPPED_MESSAGE,
+    };
+  }
 }
 
-async function regeneratePreviewFromStoredMp3(
+async function tryRegeneratePreviewFromStoredMp3(
   supabase: AdminSupabase,
   beatId: string,
   mp3Path: string,
   provider: StorageProvider,
-): Promise<string> {
-  const mp3Buffer = await downloadPaidMp3Buffer(supabase, mp3Path, provider);
-  const previewPath = `${beatId}/preview.mp3`;
-  const previewBuffer = await generateWatermarkedPreview(
-    mp3Buffer,
-    getWatermarkTagPath(),
-  );
-  await uploadBeatBuffer(
-    supabase,
-    STORAGE_BUCKETS.previews,
-    previewPath,
-    previewBuffer,
-    "audio/mpeg",
-  );
-  return previewPath;
+): Promise<ApplyMp3Result> {
+  if (!isPreviewGenerationEnabled()) {
+    return {
+      previewPath: null,
+      previewWarning: `${PREVIEW_SKIPPED_MESSAGE} (génération désactivée sur ce serveur.)`,
+    };
+  }
+
+  try {
+    const mp3Buffer = await downloadPaidMp3Buffer(supabase, mp3Path, provider);
+    return await generatePreviewFromMp3Buffer(supabase, beatId, mp3Buffer);
+  } catch (error) {
+    return {
+      previewPath: null,
+      previewWarning:
+        error instanceof Error
+          ? `${PREVIEW_SKIPPED_MESSAGE} (${error.message})`
+          : PREVIEW_SKIPPED_MESSAGE,
+    };
+  }
 }
 
 export async function createBeatShell(formData: FormData) {
@@ -350,6 +383,23 @@ export async function updateBeat(beatId: string, formData: FormData) {
       );
     }
 
+    if (uploadedWavPath) {
+      await supabase
+        .from("beat_licenses")
+        .update(paidLicensePatch(uploadedWavPath, isSoldExclusive))
+        .eq("beat_id", beatId)
+        .eq("license_type", "wav");
+    }
+
+    if (uploadedStemsPath) {
+      await syncStemsLicensePaths(
+        supabase,
+        beatId,
+        uploadedStemsPath,
+        isSoldExclusive,
+      );
+    }
+
     if (uploadedMp3Path) {
       const mp3Result = await applyMp3Upload(
         supabase,
@@ -368,30 +418,17 @@ export async function updateBeat(beatId: string, formData: FormData) {
         const provider = normalizeStorageProvider(
           mp3License?.storage_provider,
         );
-        previewPath = await regeneratePreviewFromStoredMp3(
+        const regenResult = await tryRegeneratePreviewFromStoredMp3(
           supabase,
           beatId,
           mp3Path,
           provider,
         );
+        if (regenResult.previewPath) {
+          previewPath = regenResult.previewPath;
+        }
+        previewWarning = regenResult.previewWarning;
       }
-    }
-
-    if (uploadedWavPath) {
-      await supabase
-        .from("beat_licenses")
-        .update(paidLicensePatch(uploadedWavPath, isSoldExclusive))
-        .eq("beat_id", beatId)
-        .eq("license_type", "wav");
-    }
-
-    if (uploadedStemsPath) {
-      await syncStemsLicensePaths(
-        supabase,
-        beatId,
-        uploadedStemsPath,
-        isSoldExclusive,
-      );
     }
 
     const nextStatus = isSoldExclusive
@@ -428,7 +465,27 @@ export async function updateBeat(beatId: string, formData: FormData) {
     revalidatePath("/admin");
     revalidatePath("/beats");
     revalidatePath(`/beats/${existing.slug}`);
-    return { success: true, previewWarning };
+
+    let successMessage: string | null = null;
+    if (
+      uploadedStemsPath &&
+      !uploadedMp3Path &&
+      !uploadedWavPath &&
+      !uploadedCoverPath &&
+      !coverFile
+    ) {
+      successMessage = "Stems mis à jour.";
+    } else if (
+      uploadedWavPath &&
+      !uploadedMp3Path &&
+      !uploadedStemsPath &&
+      !uploadedCoverPath &&
+      !coverFile
+    ) {
+      successMessage = "WAV mis à jour.";
+    }
+
+    return { success: true, previewWarning, successMessage };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Mise à jour échouée.";
     return { error: message };
@@ -489,12 +546,22 @@ export async function regenerateBeatPreview(beatId: string) {
     }
 
     const provider = normalizeStorageProvider(mp3License?.storage_provider);
-    const previewPath = await regeneratePreviewFromStoredMp3(
+    const regenResult = await tryRegeneratePreviewFromStoredMp3(
       supabase,
       beatId,
       mp3Path,
       provider,
     );
+
+    if (!regenResult.previewPath) {
+      return {
+        error:
+          regenResult.previewWarning ??
+          "Impossible de générer la preview automatiquement.",
+      };
+    }
+
+    const previewPath = regenResult.previewPath;
 
     const { error } = await supabase
       .from("beats")

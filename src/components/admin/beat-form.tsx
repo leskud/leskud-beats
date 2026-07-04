@@ -191,6 +191,7 @@ export function BeatForm() {
       const finalizeData = (await finalizeResponse.json().catch(() => null)) as {
         error?: string;
         previewWarning?: string | null;
+        successMessage?: string | null;
       } | null;
 
       if (!finalizeResponse.ok || finalizeData?.error) {
@@ -199,7 +200,11 @@ export function BeatForm() {
       }
 
       if (finalizeData?.previewWarning) {
-        setStatusMessage(finalizeData.previewWarning);
+        setStatusMessage(
+          `Beat enregistré. ${finalizeData.previewWarning}`,
+        );
+        router.push("/admin");
+        router.refresh();
         return;
       }
 
