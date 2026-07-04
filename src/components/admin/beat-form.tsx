@@ -10,6 +10,7 @@ import type { BeatFileKind } from "@/lib/admin/beat-paths";
 import {
   analyzeAudioFile,
   buildDefaultDescription,
+  formatClientAnalysisMessage,
 } from "@/lib/audio/analyze";
 import { GENRES, MOODS, MUSICAL_KEYS } from "@/lib/constants";
 import { slugify } from "@/lib/utils";
@@ -67,24 +68,17 @@ export function BeatForm() {
   };
 
   async function handleAudioAnalysis(file: File) {
-    setAnalysisNote("Analyse du fichier audio...");
+    setAnalysisNote("Analyse du fichier audio…");
     try {
       const analysis = await analyzeAudioFile(file);
       if (analysis.duration) setDurationSeconds(String(analysis.duration));
       if (analysis.bpm) setBpm(String(analysis.bpm));
       if (analysis.musicalKey) setMusicalKey(analysis.musicalKey);
-
-      if (analysis.source.length > 0) {
-        setAnalysisNote(
-          `Détecté automatiquement (${analysis.source.join(", ")}). Vérifiez avant publication.`,
-        );
-      } else {
-        setAnalysisNote(
-          "Durée/BPM/tonalité non détectés — complétez manuellement si besoin.",
-        );
-      }
+      setAnalysisNote(formatClientAnalysisMessage(analysis));
     } catch {
-      setAnalysisNote("Analyse impossible — saisissez les valeurs manuellement.");
+      setAnalysisNote(
+        "BPM/clé/durée non détectés automatiquement — complétez manuellement.",
+      );
     }
   }
 
@@ -194,6 +188,7 @@ export function BeatForm() {
         previewMessage?: string | null;
         noPreviewNotice?: string | null;
         successMessage?: string | null;
+        analysisMessage?: string | null;
       } | null;
 
       if (!finalizeResponse.ok || finalizeData?.error) {
@@ -203,6 +198,7 @@ export function BeatForm() {
 
       const statusParts = [
         finalizeData?.successMessage ?? "Beat enregistré.",
+        finalizeData?.analysisMessage,
         finalizeData?.previewMessage,
         finalizeData?.noPreviewNotice,
       ].filter(Boolean);
@@ -489,7 +485,14 @@ export function BeatForm() {
             <label htmlFor="wav" className="mb-1.5 block text-sm text-muted">
               WAV (49 €)
             </label>
-            <Input id="wav" name="wav" type="file" accept="audio/wav,.wav" />
+            <Input id="wav" name="wav" type="file" accept="audio/wav,.wav"
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                const mp3Input = document.getElementById("mp3") as HTMLInputElement | null;
+                const hasMp3 = Boolean(mp3Input?.files?.[0]?.size);
+                if (file && !hasMp3) await handleAudioAnalysis(file);
+              }}
+            />
           </div>
           <div className="sm:col-span-2">
             <label

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { STORAGE_BUCKETS } from "@/lib/constants";
+import { buildPreviewDownloadFilename } from "@/lib/orders/download-filename";
 import { verifyFreeDownloadToken } from "@/lib/leads/download-token";
 
 export const runtime = "nodejs";
@@ -76,7 +77,7 @@ export async function GET(request: Request) {
     }
 
     const buffer = Buffer.from(await file.arrayBuffer());
-    const filename = `${beat.slug}-preview.mp3`;
+    const filename = buildPreviewDownloadFilename(beat.title);
 
     return new NextResponse(buffer, {
       headers: attachmentHeaders(filename, buffer.length),

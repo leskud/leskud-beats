@@ -9,6 +9,7 @@ import {
   parseDownloadFileType,
   type DownloadFileType,
 } from "@/lib/orders/download-entitlements";
+import { buildPaidDownloadFilename } from "@/lib/orders/download-filename";
 import { createR2PresignedGetUrl } from "@/lib/storage/r2-presign";
 import { normalizeStorageProvider } from "@/lib/storage/types";
 import { createClient } from "@/lib/supabase/server";
@@ -35,6 +36,12 @@ type OrderItemRow = {
     stripe_checkout_session_id: string | null;
     user_id: string | null;
   };
+  beats: {
+    title: string;
+    genre: string;
+    bpm: number;
+    musical_key: string;
+  };
 };
 
 type BeatLicenseRow = Pick<
@@ -57,17 +64,22 @@ export type PaidDownloadResult =
     }
   | { success: false; error: string; status: number };
 
-function normalizeOrderItemRow(item: Record<string, unknown>): OrderItemRow {
+function normalizeOrderItemRow(item: Record<string, unknown>): OrderItemRow | null {
   const orders = item.orders as OrderItemRow["orders"] | OrderItemRow["orders"][];
   const order = Array.isArray(orders) ? orders[0] : orders;
+  const beatsRaw = item.beats as OrderItemRow["beats"] | OrderItemRow["beats"][];
+  const beat = Array.isArray(beatsRaw) ? beatsRaw[0] : beatsRaw;
+
+  if (!order?.id || !beat?.title) return null;
 
   return {
-    ...(item as Omit<OrderItemRow, "orders">),
+    ...(item as Omit<OrderItemRow, "orders" | "beats">),
     orders: order,
+    beats: beat,
   };
 }
 
-export function buildPaidDownloadFilename(
+export function buildLegacyPaidDownloadFilename(
   beatTitle: string,
   fileType: DownloadFileType,
   storagePath: string,
@@ -95,7 +107,7 @@ async function loadOrderItem(
   sessionId?: string | null,
 ): Promise<{ item: OrderItemRow | null; denied: boolean }> {
   const selectQuery =
-    "id, order_id, beat_id, license_type, beat_title, download_count, orders!inner(id, email, status, stripe_checkout_session_id, user_id)";
+    "id, order_id, beat_id, license_type, beat_title, download_count, orders!inner(id, email, status, stripe_checkout_session_id, user_id), beats!inner(title, genre, bpm, musical_key)";
 
   if (sessionId) {
     const service = createServiceClient();
@@ -108,6 +120,8 @@ async function loadOrderItem(
     if (!item) return { item: null, denied: false };
 
     const row = normalizeOrderItemRow(item as Record<string, unknown>);
+    if (!row) return { item: null, denied: false };
+
     if (row.orders.stripe_checkout_session_id !== sessionId) {
       return { item: null, denied: true };
     }
@@ -133,6 +147,8 @@ async function loadOrderItem(
   if (!item) return { item: null, denied: false };
 
   const row = normalizeOrderItemRow(item as Record<string, unknown>);
+  if (!row) return { item: null, denied: false };
+
   const ownsOrder =
     row.orders.user_id === user.id ||
     row.orders.email.toLowerCase() === user.email?.toLowerCase();
@@ -212,11 +228,15 @@ export async function createPaidDownload(
   const storageProvider = normalizeStorageProvider(
     fileLicense.storage_provider,
   );
-  const filename = buildPaidDownloadFilename(
-    item.beat_title,
+  const filename = buildPaidDownloadFilename({
+    genre: item.beats.genre,
+    title: item.beats.title || item.beat_title,
+    bpm: item.beats.bpm,
+    musicalKey: item.beats.musical_key,
+    licenseType: purchasedLicense,
     fileType,
-    fileLicense.storage_path,
-  );
+    storagePath: fileLicense.storage_path,
+  });
   const contentType = contentTypeForPath(fileLicense.storage_path);
 
   await incrementDownloadCount(params.orderItemId, item.download_count);

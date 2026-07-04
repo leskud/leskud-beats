@@ -22,6 +22,7 @@ export async function PATCH(request: Request, context: RouteContext) {
       previewMessage: result.previewMessage ?? null,
       noPreviewNotice: result.noPreviewNotice ?? null,
       successMessage: result.successMessage ?? null,
+      analysisMessage: result.analysisMessage ?? null,
     });
   } catch (error) {
     const message =

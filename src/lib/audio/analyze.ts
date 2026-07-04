@@ -1,3 +1,18 @@
+import {
+  type AudioAnalysisResult,
+  formatAnalysisSuccessMessage,
+  hasAnalysisValues,
+  normalizeMusicalKey,
+  parseFilenameHints,
+  AUDIO_ANALYSIS_FAILED_MESSAGE,
+} from "@/lib/audio/analyze-shared";
+
+export {
+  type AudioAnalysisResult,
+  formatAnalysisSuccessMessage,
+  AUDIO_ANALYSIS_FAILED_MESSAGE,
+} from "@/lib/audio/analyze-shared";
+
 export function buildDefaultDescription({
   title,
   bpm,
@@ -22,27 +37,6 @@ Beat professionnel disponible en licence MP3, WAV, Stems et Unlimited.
 Idéal pour artistes, vidéos et projets créatifs.
 
 © LeSkud — tous droits réservés.`;
-}
-
-export function parseFilenameHints(filename: string): {
-  bpm?: number;
-  key?: string;
-} {
-  const hints: { bpm?: number; key?: string } = {};
-  const bpmMatch = filename.match(/(\d{2,3})\s*bpm/i);
-  if (bpmMatch) hints.bpm = Number(bpmMatch[1]);
-
-  const keyMatch = filename.match(
-    /\b([A-G][#b]?m?)\b/i,
-  );
-  if (keyMatch) {
-    const raw = keyMatch[1];
-    hints.key = raw.endsWith("m") || raw.endsWith("M")
-      ? raw.charAt(0).toUpperCase() + raw.slice(1)
-      : raw.charAt(0).toUpperCase() + raw.slice(1);
-  }
-
-  return hints;
 }
 
 async function getAudioDuration(file: File): Promise<number> {
@@ -96,7 +90,10 @@ async function readMetadataTags(file: File): Promise<{
     if (typeof bpm === "number" && bpm > 0) result.bpm = Math.round(bpm);
 
     const key = metadata.common.key;
-    if (key) result.key = key;
+    if (typeof key === "string") {
+      const normalized = normalizeMusicalKey(key);
+      if (normalized) result.key = normalized;
+    }
 
     return result;
   } catch {
@@ -104,15 +101,10 @@ async function readMetadataTags(file: File): Promise<{
   }
 }
 
-export type AudioAnalysis = {
-  duration?: number;
-  bpm?: number;
-  musicalKey?: string;
-  source: string[];
-};
+export type AudioAnalysis = AudioAnalysisResult;
 
 export async function analyzeAudioFile(file: File): Promise<AudioAnalysis> {
-  const source: string[] = [];
+  const sources: string[] = [];
   const filenameHints = parseFilenameHints(file.name);
 
   const [metadata, duration, detectedBpm] = await Promise.all([
@@ -121,31 +113,43 @@ export async function analyzeAudioFile(file: File): Promise<AudioAnalysis> {
     detectBpm(file),
   ]);
 
-  const result: AudioAnalysis = { source };
+  const result: AudioAnalysis = { sources };
 
   if (metadata.duration || duration) {
     result.duration = metadata.duration ?? duration;
-    source.push("durée audio");
+    sources.push("durée audio");
   }
 
   if (metadata.bpm) {
     result.bpm = metadata.bpm;
-    source.push("tags fichier");
+    sources.push("tags fichier");
   } else if (filenameHints.bpm) {
     result.bpm = filenameHints.bpm;
-    source.push("nom du fichier");
+    sources.push("nom du fichier");
   } else if (detectedBpm) {
     result.bpm = detectedBpm;
-    source.push("analyse audio");
+    sources.push("analyse audio");
   }
 
   if (metadata.key) {
     result.musicalKey = metadata.key;
-    source.push("tags fichier");
+    sources.push("tags fichier");
   } else if (filenameHints.key) {
-    result.musicalKey = filenameHints.key;
-    source.push("nom du fichier");
+    const normalized = normalizeMusicalKey(filenameHints.key);
+    if (normalized) {
+      result.musicalKey = normalized;
+      sources.push("nom du fichier");
+    }
   }
 
   return result;
+}
+
+export function formatClientAnalysisMessage(
+  analysis: Pick<AudioAnalysis, "bpm" | "musicalKey" | "duration">,
+): string {
+  if (hasAnalysisValues(analysis)) {
+    return formatAnalysisSuccessMessage(analysis);
+  }
+  return "BPM/clé/durée non détectés automatiquement — complétez manuellement.";
 }

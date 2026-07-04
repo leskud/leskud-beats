@@ -7,6 +7,10 @@ import {
   type UploadProgressCallback,
 } from "@/lib/admin/client-upload";
 import type { BeatFileKind } from "@/lib/admin/beat-paths";
+import {
+  analyzeAudioFile,
+  formatClientAnalysisMessage,
+} from "@/lib/audio/analyze";
 import { GENRES, MOODS, MUSICAL_KEYS } from "@/lib/constants";
 import type { BeatWithLicenses } from "@/types/database";
 import { Button } from "@/components/ui/button";
@@ -32,6 +36,12 @@ export function BeatEditForm({ beat }: BeatEditFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [analysisNote, setAnalysisNote] = useState<string | null>(null);
+  const [bpm, setBpm] = useState(String(beat.bpm));
+  const [durationSeconds, setDurationSeconds] = useState(
+    String(beat.duration_seconds),
+  );
+  const [musicalKey, setMusicalKey] = useState(beat.musical_key);
 
   const isKnownGenre = GENRES.includes(
     beat.genre as (typeof GENRES)[number],
@@ -46,6 +56,21 @@ export function BeatEditForm({ beat }: BeatEditFormProps) {
   const onUploadProgress: UploadProgressCallback = (message) => {
     setStatusMessage(message);
   };
+
+  async function handleAudioAnalysis(file: File) {
+    setAnalysisNote("Analyse du fichier audio…");
+    try {
+      const analysis = await analyzeAudioFile(file);
+      if (analysis.duration) setDurationSeconds(String(analysis.duration));
+      if (analysis.bpm) setBpm(String(analysis.bpm));
+      if (analysis.musicalKey) setMusicalKey(analysis.musicalKey);
+      setAnalysisNote(formatClientAnalysisMessage(analysis));
+    } catch {
+      setAnalysisNote(
+        "BPM/clé/durée non détectés automatiquement — complétez manuellement.",
+      );
+    }
+  }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -115,6 +140,7 @@ export function BeatEditForm({ beat }: BeatEditFormProps) {
         previewMessage?: string | null;
         noPreviewNotice?: string | null;
         successMessage?: string | null;
+        analysisMessage?: string | null;
       } | null;
 
       if (!response.ok || data?.error) {
@@ -129,6 +155,7 @@ export function BeatEditForm({ beat }: BeatEditFormProps) {
             : uploadedPaths.wav && !uploadedPaths.mp3 && !uploadedPaths.stems
               ? "WAV mis à jour."
               : "Upload terminé — beat mis à jour."),
+        data?.analysisMessage,
         data?.previewMessage,
         data?.noPreviewNotice,
       ].filter(Boolean);
@@ -170,6 +197,12 @@ export function BeatEditForm({ beat }: BeatEditFormProps) {
         </div>
       )}
 
+      {analysisNote && (
+        <div className="rounded-lg border border-gold/20 bg-gold/10 px-4 py-3 text-sm text-gold">
+          {analysisNote}
+        </div>
+      )}
+
       <section className="space-y-4">
         <h2 className="text-lg font-medium">Informations</h2>
         <div className="grid gap-4 sm:grid-cols-2">
@@ -189,7 +222,8 @@ export function BeatEditForm({ beat }: BeatEditFormProps) {
               name="bpm"
               type="number"
               required
-              defaultValue={beat.bpm}
+              value={bpm}
+              onChange={(e) => setBpm(e.target.value)}
             />
           </div>
 
@@ -205,7 +239,8 @@ export function BeatEditForm({ beat }: BeatEditFormProps) {
               name="durationSeconds"
               type="number"
               required
-              defaultValue={beat.duration_seconds}
+              value={durationSeconds}
+              onChange={(e) => setDurationSeconds(e.target.value)}
             />
           </div>
 
@@ -220,7 +255,8 @@ export function BeatEditForm({ beat }: BeatEditFormProps) {
               id="musicalKey"
               name="musicalKey"
               required
-              defaultValue={beat.musical_key}
+              value={musicalKey}
+              onChange={(e) => setMusicalKey(e.target.value)}
             >
               {MUSICAL_KEYS.map((key) => (
                 <option key={key} value={key}>
@@ -361,8 +397,28 @@ export function BeatEditForm({ beat }: BeatEditFormProps) {
         </label>
         <div className="grid gap-4 sm:grid-cols-2">
           <Input name="cover" type="file" accept="image/*" />
-          <Input name="mp3" type="file" accept="audio/mpeg,.mp3" />
-          <Input name="wav" type="file" accept="audio/wav,.wav" />
+          <Input
+            name="mp3"
+            type="file"
+            accept="audio/mpeg,.mp3"
+            onChange={async (e) => {
+              const file = e.target.files?.[0];
+              if (file) await handleAudioAnalysis(file);
+            }}
+          />
+          <Input
+            name="wav"
+            type="file"
+            accept="audio/wav,.wav"
+            onChange={async (e) => {
+              const file = e.target.files?.[0];
+              const mp3Input = e.currentTarget.form?.elements.namedItem(
+                "mp3",
+              ) as HTMLInputElement | null;
+              const hasMp3 = Boolean(mp3Input?.files?.[0]?.size);
+              if (file && !hasMp3) await handleAudioAnalysis(file);
+            }}
+          />
           <Input name="stemsZip" type="file" accept=".zip,application/zip" />
         </div>
       </section>

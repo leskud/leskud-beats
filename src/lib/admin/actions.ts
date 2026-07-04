@@ -18,6 +18,12 @@ import {
 import {
   generateWatermarkedPreview,
 } from "@/lib/audio/watermark";
+import { analyzeAudioBuffer } from "@/lib/audio/analyze-server";
+import {
+  AUDIO_ANALYSIS_FAILED_MESSAGE,
+  formatAnalysisSuccessMessage,
+  hasAnalysisValues,
+} from "@/lib/audio/analyze-shared";
 import {
   NO_PREVIEW_PLAYER_MESSAGE,
   PREVIEW_GENERATED_MESSAGE,
@@ -65,6 +71,42 @@ function getUploadedPath(formData: FormData, key: string): string | null {
 }
 
 type AdminSupabase = Awaited<ReturnType<typeof requireAdmin>>["supabase"];
+
+async function analyzeUploadedBeatAudio(
+  uploadedMp3Path: string | null,
+  uploadedWavPath: string | null,
+): Promise<{
+  bpm?: number;
+  musicalKey?: string;
+  durationSeconds?: number;
+  message: string | null;
+}> {
+  const audioPath = uploadedMp3Path ?? uploadedWavPath;
+  if (!audioPath) {
+    return { message: null };
+  }
+
+  try {
+    const buffer = await downloadR2ObjectBuffer(audioPath);
+    const analysis = await analyzeAudioBuffer(buffer, audioPath);
+
+    const message = hasAnalysisValues(analysis)
+      ? formatAnalysisSuccessMessage(analysis)
+      : AUDIO_ANALYSIS_FAILED_MESSAGE;
+
+    return {
+      bpm: analysis.bpm,
+      musicalKey: analysis.musicalKey,
+      durationSeconds: analysis.duration,
+      message,
+    };
+  } catch (error) {
+    previewLogError("audio_analysis_failed", error, {
+      audio_path: audioPath,
+    });
+    return { message: AUDIO_ANALYSIS_FAILED_MESSAGE };
+  }
+}
 
 const PAID_STORAGE_PROVIDER = "r2" as const;
 
@@ -367,14 +409,14 @@ export async function updateBeat(beatId: string, formData: FormData) {
   const { supabase } = await requireAdmin();
 
   const title = String(formData.get("title") ?? "").trim();
-  const bpm = Number(formData.get("bpm"));
-  const musicalKey = String(formData.get("musicalKey") ?? "").trim();
+  let bpm = Number(formData.get("bpm"));
+  let musicalKey = String(formData.get("musicalKey") ?? "").trim();
   const genreSelect = String(formData.get("genre") ?? "").trim();
   const genreCustom = String(formData.get("genreCustom") ?? "").trim();
   const genre = genreSelect === "Autre" ? genreCustom : genreSelect;
   const mood = String(formData.get("mood") ?? "").trim();
   const tagsRaw = String(formData.get("tags") ?? "");
-  const durationSeconds = Number(formData.get("durationSeconds"));
+  let durationSeconds = Number(formData.get("durationSeconds"));
   const description = String(formData.get("description") ?? "").trim();
   const status = String(formData.get("status") ?? "draft") as BeatStatus;
   const isFeatured = formData.get("isFeatured") === "true";
@@ -386,11 +428,6 @@ export async function updateBeat(beatId: string, formData: FormData) {
   const uploadedStemsPath = getUploadedPath(formData, "uploadedStemsPath");
 
   if (!title) return { error: "Le titre est requis." };
-  if (!bpm || bpm < 1 || bpm > 300) return { error: "BPM invalide." };
-  if (!musicalKey || !genre || !mood)
-    return { error: "Tonalité, genre et mood sont requis." };
-  if (!durationSeconds || durationSeconds < 1)
-    return { error: "Durée invalide." };
 
   const { data: existing } = await supabase
     .from("beats")
@@ -399,6 +436,33 @@ export async function updateBeat(beatId: string, formData: FormData) {
     .single();
 
   if (!existing) return { error: "Beat introuvable." };
+
+  let analysisMessage: string | null = null;
+
+  const shouldAnalyzeAudio = Boolean(uploadedMp3Path || uploadedWavPath);
+  const stemsOnlyUpdate =
+    Boolean(uploadedStemsPath) &&
+    !uploadedMp3Path &&
+    !uploadedWavPath &&
+    !uploadedCoverPath &&
+    !coverFile;
+
+  if (shouldAnalyzeAudio && !stemsOnlyUpdate) {
+    const analysis = await analyzeUploadedBeatAudio(
+      uploadedMp3Path,
+      uploadedWavPath,
+    );
+    analysisMessage = analysis.message;
+    if (analysis.bpm) bpm = analysis.bpm;
+    if (analysis.musicalKey) musicalKey = analysis.musicalKey;
+    if (analysis.durationSeconds) durationSeconds = analysis.durationSeconds;
+  }
+
+  if (!bpm || bpm < 1 || bpm > 300) return { error: "BPM invalide." };
+  if (!musicalKey || !genre || !mood)
+    return { error: "Tonalité, genre et mood sont requis." };
+  if (!durationSeconds || durationSeconds < 1)
+    return { error: "Durée invalide." };
 
   const isSoldExclusive = existing.status === "sold_exclusive";
   const mp3License = existing.beat_licenses?.find(
@@ -566,6 +630,7 @@ export async function updateBeat(beatId: string, formData: FormData) {
       previewMessage,
       noPreviewNotice,
       successMessage,
+      analysisMessage,
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Mise à jour échouée.";

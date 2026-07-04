@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Download } from "lucide-react";
 import { LeskudLogo } from "@/components/brand/leskud-logo";
+import { buildPreviewDownloadFilename } from "@/lib/orders/download-filename";
 import { buildFreeDownloadFileQuery } from "@/lib/leads/download-token-query";
 import { triggerFileDownload } from "@/lib/leads/client";
 import { Button } from "@/components/ui/button";
@@ -25,7 +26,7 @@ export function BeatDownloadClient({
   exp,
 }: BeatDownloadClientProps) {
   const [status, setStatus] = useState<"loading" | "done" | "error">("loading");
-  const filename = `${beatSlug}-preview.mp3`;
+  const filename = buildPreviewDownloadFilename(beatTitle);
   const downloadPath = buildFreeDownloadFileQuery(beatId, email, token, exp);
 
   async function startDownload() {
