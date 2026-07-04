@@ -7,11 +7,47 @@ import { createServiceClient } from "@/lib/supabase/service";
 import type { LicenseType } from "@/lib/constants";
 import type Stripe from "stripe";
 
+export type FulfillResult = {
+  fulfilled: boolean;
+  reason?: string;
+  orderId?: string;
+};
+
+function logFulfill(
+  level: "info" | "error" | "warn",
+  message: string,
+  context: Record<string, unknown>,
+) {
+  const payload = JSON.stringify(context);
+  if (level === "error") {
+    console.error(`[fulfill-order] ${message}`, payload);
+  } else if (level === "warn") {
+    console.warn(`[fulfill-order] ${message}`, payload);
+  } else {
+    console.info(`[fulfill-order] ${message}`, payload);
+  }
+}
+
 export async function fulfillCheckoutSession(
   session: Stripe.Checkout.Session,
-): Promise<{ fulfilled: boolean; reason?: string }> {
+): Promise<FulfillResult> {
   const sessionId = session.id;
   const supabase = createServiceClient();
+
+  const beatLicenseId = session.metadata?.beat_license_id;
+  const beatId = session.metadata?.beat_id;
+  const licenseType = session.metadata?.license_type as LicenseType | undefined;
+  const userId = session.metadata?.user_id?.trim() || null;
+
+  const logContext = {
+    sessionId,
+    beatLicenseId,
+    beatId,
+    licenseType,
+    paymentStatus: session.payment_status,
+  };
+
+  logFulfill("info", "start", logContext);
 
   const { data: existingOrder } = await supabase
     .from("orders")
@@ -20,15 +56,15 @@ export async function fulfillCheckoutSession(
     .maybeSingle();
 
   if (existingOrder) {
-    return { fulfilled: true, reason: "already_fulfilled" };
+    logFulfill("info", "already_fulfilled", {
+      ...logContext,
+      orderId: existingOrder.id,
+    });
+    return { fulfilled: true, reason: "already_fulfilled", orderId: existingOrder.id };
   }
 
-  const beatLicenseId = session.metadata?.beat_license_id;
-  const beatId = session.metadata?.beat_id;
-  const licenseType = session.metadata?.license_type as LicenseType | undefined;
-  const userId = session.metadata?.user_id?.trim() || null;
-
   if (!beatLicenseId || !beatId || !licenseType) {
+    logFulfill("error", "missing_metadata", logContext);
     return { fulfilled: false, reason: "missing_metadata" };
   }
 
@@ -38,6 +74,7 @@ export async function fulfillCheckoutSession(
     session.metadata?.customer_email;
 
   if (!email) {
+    logFulfill("error", "missing_email", logContext);
     return { fulfilled: false, reason: "missing_email" };
   }
 
@@ -50,6 +87,10 @@ export async function fulfillCheckoutSession(
     .single();
 
   if (licenseError || !license) {
+    logFulfill("error", "license_not_found", {
+      ...logContext,
+      licenseError: licenseError?.message,
+    });
     return { fulfilled: false, reason: "license_not_found" };
   }
 
@@ -60,25 +101,36 @@ export async function fulfillCheckoutSession(
   };
 
   if (!beat?.id || beat.id !== beatId) {
+    logFulfill("error", "beat_mismatch", {
+      ...logContext,
+      licenseBeatId: license.beat_id,
+      beatStatus: beat?.status,
+    });
     return { fulfilled: false, reason: "beat_mismatch" };
   }
 
-  if (beat.status === "sold_exclusive") {
-    return { fulfilled: false, reason: "beat_already_sold" };
+  if (license.license_type !== licenseType) {
+    logFulfill("error", "license_type_mismatch", {
+      ...logContext,
+      licenseRowType: license.license_type,
+    });
+    return { fulfilled: false, reason: "license_type_mismatch" };
   }
 
-  if (
-    !license.is_available ||
-    !license.storage_path?.trim() ||
-    license.license_type !== licenseType
-  ) {
-    return { fulfilled: false, reason: "license_unavailable" };
+  if (beat.status === "draft") {
+    logFulfill("error", "beat_not_purchasable", {
+      ...logContext,
+      beatStatus: beat.status,
+    });
+    return { fulfilled: false, reason: "beat_not_purchasable" };
   }
 
   const totalCents = session.amount_total ?? license.price_cents;
 
   const acceptedAtRaw = session.metadata?.accepted_at;
-  const acceptedAt = acceptedAtRaw ? new Date(acceptedAtRaw).toISOString() : null;
+  const acceptedAt = acceptedAtRaw
+    ? new Date(acceptedAtRaw).toISOString()
+    : null;
   const termsVersion = session.metadata?.terms_version?.trim() || null;
   const licenseVersion = session.metadata?.license_version?.trim() || null;
   const buyerIp = session.metadata?.buyer_ip?.trim() || null;
@@ -108,7 +160,24 @@ export async function fulfillCheckoutSession(
     .select("id")
     .single();
 
-  if (orderError || !order) {
+  if (orderError) {
+    if (orderError.code === "23505") {
+      logFulfill("info", "already_fulfilled_race", {
+        ...logContext,
+        orderError: orderError.message,
+      });
+      return { fulfilled: true, reason: "already_fulfilled" };
+    }
+
+    logFulfill("error", "order_insert_failed", {
+      ...logContext,
+      orderError: orderError.message,
+    });
+    return { fulfilled: false, reason: "order_insert_failed" };
+  }
+
+  if (!order) {
+    logFulfill("error", "order_insert_failed", logContext);
     return { fulfilled: false, reason: "order_insert_failed" };
   }
 
@@ -123,6 +192,11 @@ export async function fulfillCheckoutSession(
   });
 
   if (itemError) {
+    logFulfill("error", "order_item_insert_failed", {
+      ...logContext,
+      orderId: order.id,
+      itemError: itemError.message,
+    });
     return { fulfilled: false, reason: "order_item_insert_failed" };
   }
 
@@ -132,11 +206,27 @@ export async function fulfillCheckoutSession(
     });
 
     if (rpcError) {
-      return { fulfilled: false, reason: "exclusive_mark_failed" };
+      logFulfill("warn", "exclusive_mark_failed", {
+        ...logContext,
+        orderId: order.id,
+        rpcError: rpcError.message,
+      });
+    } else {
+      logFulfill("info", "exclusive_marked_sold", {
+        ...logContext,
+        orderId: order.id,
+      });
     }
   }
 
-  return { fulfilled: true };
+  logFulfill("info", "fulfilled", {
+    ...logContext,
+    orderId: order.id,
+    beatStatus: beat.status,
+    licenseWasAvailable: license.is_available,
+  });
+
+  return { fulfilled: true, orderId: order.id };
 }
 
 export function getCheckoutProductName(

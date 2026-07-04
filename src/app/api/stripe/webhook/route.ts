@@ -5,6 +5,15 @@ import type Stripe from "stripe";
 
 export const runtime = "nodejs";
 
+const NON_RETRYABLE_REASONS = new Set([
+  "missing_metadata",
+  "missing_email",
+  "license_not_found",
+  "beat_mismatch",
+  "license_type_mismatch",
+  "beat_not_purchasable",
+]);
+
 export async function POST(request: Request) {
   const signature = request.headers.get("stripe-signature");
 
@@ -31,6 +40,17 @@ export async function POST(request: Request) {
   if (event.type === "checkout.session.completed") {
     const session = event.data.object as Stripe.Checkout.Session;
 
+    console.info(
+      "[stripe/webhook] checkout.session.completed",
+      JSON.stringify({
+        sessionId: session.id,
+        paymentStatus: session.payment_status,
+        beatLicenseId: session.metadata?.beat_license_id,
+        beatId: session.metadata?.beat_id,
+        licenseType: session.metadata?.license_type,
+      }),
+    );
+
     if (session.payment_status !== "paid") {
       return NextResponse.json({ received: true, skipped: "not_paid" });
     }
@@ -38,12 +58,39 @@ export async function POST(request: Request) {
     const result = await fulfillCheckoutSession(session);
 
     if (!result.fulfilled) {
-      console.error("[stripe/webhook] fulfill failed:", result.reason, session.id);
+      console.error(
+        "[stripe/webhook] fulfill failed",
+        JSON.stringify({
+          sessionId: session.id,
+          reason: result.reason,
+          beatLicenseId: session.metadata?.beat_license_id,
+          beatId: session.metadata?.beat_id,
+          licenseType: session.metadata?.license_type,
+        }),
+      );
+
+      const status = NON_RETRYABLE_REASONS.has(result.reason ?? "")
+        ? 200
+        : 500;
+
       return NextResponse.json(
-        { error: result.reason ?? "fulfillment_failed" },
-        { status: 500 },
+        {
+          received: status === 200,
+          error: result.reason ?? "fulfillment_failed",
+          retry: status === 500,
+        },
+        { status },
       );
     }
+
+    console.info(
+      "[stripe/webhook] fulfill success",
+      JSON.stringify({
+        sessionId: session.id,
+        reason: result.reason,
+        orderId: result.orderId,
+      }),
+    );
   }
 
   return NextResponse.json({ received: true });
