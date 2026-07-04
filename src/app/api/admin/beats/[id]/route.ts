@@ -19,6 +19,8 @@ export async function PATCH(request: Request, context: RouteContext) {
     return NextResponse.json({
       success: true,
       previewWarning: result.previewWarning ?? null,
+      previewMessage: result.previewMessage ?? null,
+      noPreviewNotice: result.noPreviewNotice ?? null,
       successMessage: result.successMessage ?? null,
     });
   } catch (error) {

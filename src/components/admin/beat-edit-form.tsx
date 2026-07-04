@@ -112,6 +112,8 @@ export function BeatEditForm({ beat }: BeatEditFormProps) {
       const data = (await response.json().catch(() => null)) as {
         error?: string;
         previewWarning?: string | null;
+        previewMessage?: string | null;
+        noPreviewNotice?: string | null;
         successMessage?: string | null;
       } | null;
 
@@ -120,20 +122,18 @@ export function BeatEditForm({ beat }: BeatEditFormProps) {
         return;
       }
 
-      const successText =
+      const statusParts = [
         data?.successMessage ??
-        (uploadedPaths.stems && !uploadedPaths.mp3 && !uploadedPaths.wav
-          ? "Stems mis à jour."
-          : "Upload terminé — beat mis à jour.");
+          (uploadedPaths.stems && !uploadedPaths.mp3 && !uploadedPaths.wav
+            ? "Stems mis à jour."
+            : uploadedPaths.wav && !uploadedPaths.mp3 && !uploadedPaths.stems
+              ? "WAV mis à jour."
+              : "Upload terminé — beat mis à jour."),
+        data?.previewMessage,
+        data?.noPreviewNotice,
+      ].filter(Boolean);
 
-      if (data?.previewWarning) {
-        setStatusMessage(`${successText} ${data.previewWarning}`);
-        router.push("/admin");
-        router.refresh();
-        return;
-      }
-
-      setStatusMessage(successText);
+      setStatusMessage(statusParts.join(" "));
       router.push("/admin");
       router.refresh();
     } catch (uploadError) {

@@ -191,6 +191,8 @@ export function BeatForm() {
       const finalizeData = (await finalizeResponse.json().catch(() => null)) as {
         error?: string;
         previewWarning?: string | null;
+        previewMessage?: string | null;
+        noPreviewNotice?: string | null;
         successMessage?: string | null;
       } | null;
 
@@ -199,15 +201,13 @@ export function BeatForm() {
         return;
       }
 
-      if (finalizeData?.previewWarning) {
-        setStatusMessage(
-          `Beat enregistré. ${finalizeData.previewWarning}`,
-        );
-        router.push("/admin");
-        router.refresh();
-        return;
-      }
+      const statusParts = [
+        finalizeData?.successMessage ?? "Beat enregistré.",
+        finalizeData?.previewMessage,
+        finalizeData?.noPreviewNotice,
+      ].filter(Boolean);
 
+      setStatusMessage(statusParts.join(" "));
       router.push("/admin");
       router.refresh();
     } catch (submitError) {

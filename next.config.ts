@@ -5,7 +5,17 @@ const supabaseHost = process.env.NEXT_PUBLIC_SUPABASE_URL
   : "*.supabase.co";
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ["ffmpeg-static", "music-metadata"],
+  serverExternalPackages: ["music-metadata"],
+  outputFileTracingIncludes: {
+    "/api/admin/beats/**": [
+      "./node_modules/ffmpeg-static/**",
+      "./assets/audio/**",
+    ],
+    "/admin/**": [
+      "./node_modules/ffmpeg-static/**",
+      "./assets/audio/**",
+    ],
+  },
   experimental: {
     serverActions: {
       bodySizeLimit: "250mb",

@@ -1,5 +1,7 @@
 import { execFile } from "node:child_process";
 import {
+  accessSync,
+  constants,
   mkdirSync,
   readFileSync,
   rmSync,
@@ -8,7 +10,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import ffmpegPath from "ffmpeg-static";
+import { resolveFfmpegExecutable } from "@/lib/audio/ffmpeg-path";
 import { parseFile } from "music-metadata";
 
 const execFileAsync = promisify(execFile);
@@ -95,11 +97,15 @@ export async function generateWatermarkedPreview(
   mp3Buffer: Buffer,
   watermarkPath: string,
 ): Promise<Buffer> {
-  if (!ffmpegPath) {
-    throw new Error("FFmpeg introuvable sur ce serveur.");
+  const ffmpegExecutable = resolveFfmpegExecutable();
+
+  try {
+    accessSync(watermarkPath, constants.R_OK);
+  } catch {
+    throw new Error("Watermark tag audio file missing");
   }
 
-  const tempDir = join(tmpdir(), `leskud-${Date.now()}`);
+  const tempDir = join(tmpdir(), `leskud-preview-${Date.now()}`);
   mkdirSync(tempDir, { recursive: true });
 
   const inputPath = join(tempDir, "input.mp3");
@@ -113,22 +119,29 @@ export async function generateWatermarkedPreview(
       await getWatermarkTagDurationSeconds(watermarkPath);
     const filter = buildWatermarkFilter(durationSeconds, tagDurationSeconds);
 
-    await execFileAsync(ffmpegPath, [
-      "-y",
-      "-i",
-      inputPath,
-      "-i",
-      watermarkPath,
-      "-filter_complex",
-      filter,
-      "-map",
-      "[out]",
-      "-codec:a",
-      "libmp3lame",
-      "-b:a",
-      "192k",
-      outputPath,
-    ]);
+    await execFileAsync(
+      ffmpegExecutable,
+      [
+        "-y",
+        "-i",
+        inputPath,
+        "-i",
+        watermarkPath,
+        "-filter_complex",
+        filter,
+        "-map",
+        "[out]",
+        "-codec:a",
+        "libmp3lame",
+        "-b:a",
+        "192k",
+        outputPath,
+      ],
+      {
+        timeout: 90_000,
+        maxBuffer: 16 * 1024 * 1024,
+      },
+    );
 
     return readFileSync(outputPath);
   } finally {

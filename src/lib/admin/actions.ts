@@ -19,6 +19,11 @@ import {
   generateWatermarkedPreview,
   getWatermarkTagPath,
 } from "@/lib/audio/watermark";
+import {
+  NO_PREVIEW_PLAYER_MESSAGE,
+  PREVIEW_GENERATED_MESSAGE,
+  PREVIEW_SKIPPED_MESSAGE,
+} from "@/lib/audio/preview-messages";
 import { isPreviewGenerationEnabled } from "@/lib/config/env";
 import { downloadR2ObjectBuffer } from "@/lib/storage/r2-presign";
 import {
@@ -138,10 +143,8 @@ async function refreshBeatLicenseAvailability(
 type ApplyMp3Result = {
   previewPath: string | null;
   previewWarning: string | null;
+  previewGenerated: boolean;
 };
-
-const PREVIEW_SKIPPED_MESSAGE =
-  "Fichier enregistré, mais preview non générée automatiquement.";
 
 async function generatePreviewFromMp3Buffer(
   supabase: AdminSupabase,
@@ -151,7 +154,8 @@ async function generatePreviewFromMp3Buffer(
   if (!isPreviewGenerationEnabled()) {
     return {
       previewPath: null,
-      previewWarning: `${PREVIEW_SKIPPED_MESSAGE} (génération désactivée sur ce serveur.)`,
+      previewWarning: PREVIEW_SKIPPED_MESSAGE,
+      previewGenerated: false,
     };
   }
 
@@ -169,14 +173,16 @@ async function generatePreviewFromMp3Buffer(
       previewBuffer,
       "audio/mpeg",
     );
-    return { previewPath: previewTarget, previewWarning: null };
-  } catch (error) {
+    return {
+      previewPath: previewTarget,
+      previewWarning: null,
+      previewGenerated: true,
+    };
+  } catch {
     return {
       previewPath: null,
-      previewWarning:
-        error instanceof Error
-          ? `${PREVIEW_SKIPPED_MESSAGE} (${error.message})`
-          : PREVIEW_SKIPPED_MESSAGE,
+      previewWarning: PREVIEW_SKIPPED_MESSAGE,
+      previewGenerated: false,
     };
   }
 }
@@ -196,13 +202,11 @@ async function applyMp3Upload(
   try {
     const mp3Buffer = await downloadR2ObjectBuffer(mp3Path);
     return await generatePreviewFromMp3Buffer(supabase, beatId, mp3Buffer);
-  } catch (error) {
+  } catch {
     return {
       previewPath: null,
-      previewWarning:
-        error instanceof Error
-          ? `${PREVIEW_SKIPPED_MESSAGE} (${error.message})`
-          : PREVIEW_SKIPPED_MESSAGE,
+      previewWarning: PREVIEW_SKIPPED_MESSAGE,
+      previewGenerated: false,
     };
   }
 }
@@ -216,22 +220,47 @@ async function tryRegeneratePreviewFromStoredMp3(
   if (!isPreviewGenerationEnabled()) {
     return {
       previewPath: null,
-      previewWarning: `${PREVIEW_SKIPPED_MESSAGE} (génération désactivée sur ce serveur.)`,
+      previewWarning: PREVIEW_SKIPPED_MESSAGE,
+      previewGenerated: false,
     };
   }
 
   try {
     const mp3Buffer = await downloadPaidMp3Buffer(supabase, mp3Path, provider);
     return await generatePreviewFromMp3Buffer(supabase, beatId, mp3Buffer);
-  } catch (error) {
+  } catch {
     return {
       previewPath: null,
-      previewWarning:
-        error instanceof Error
-          ? `${PREVIEW_SKIPPED_MESSAGE} (${error.message})`
-          : PREVIEW_SKIPPED_MESSAGE,
+      previewWarning: PREVIEW_SKIPPED_MESSAGE,
+      previewGenerated: false,
     };
   }
+}
+
+function buildPreviewAdminFeedback(
+  previewPath: string | null,
+  previewWarning: string | null,
+  previewGenerated: boolean,
+  previewAttempted: boolean,
+  nextStatus: BeatStatus,
+): {
+  previewMessage: string | null;
+  noPreviewNotice: string | null;
+} {
+  let previewMessage: string | null = null;
+
+  if (previewGenerated && previewPath) {
+    previewMessage = PREVIEW_GENERATED_MESSAGE;
+  } else if (previewAttempted && previewWarning) {
+    previewMessage = previewWarning;
+  }
+
+  const noPreviewNotice =
+    nextStatus === "published" && !previewPath
+      ? NO_PREVIEW_PLAYER_MESSAGE
+      : null;
+
+  return { previewMessage, noPreviewNotice };
 }
 
 export async function createBeatShell(formData: FormData) {
@@ -366,6 +395,8 @@ export async function updateBeat(beatId: string, formData: FormData) {
   }
 
   let previewWarning: string | null = null;
+  let previewGenerated = false;
+  let previewAttempted = false;
 
   try {
     let coverPath = existing.cover_path;
@@ -401,6 +432,7 @@ export async function updateBeat(beatId: string, formData: FormData) {
     }
 
     if (uploadedMp3Path) {
+      previewAttempted = true;
       const mp3Result = await applyMp3Upload(
         supabase,
         beatId,
@@ -411,10 +443,12 @@ export async function updateBeat(beatId: string, formData: FormData) {
         previewPath = mp3Result.previewPath;
       }
       previewWarning = mp3Result.previewWarning;
+      previewGenerated = mp3Result.previewGenerated;
     } else if (formData.get("regeneratePreview") === "true") {
       const mp3Path = mp3License?.storage_path;
 
       if (mp3Path) {
+        previewAttempted = true;
         const provider = normalizeStorageProvider(
           mp3License?.storage_provider,
         );
@@ -428,6 +462,7 @@ export async function updateBeat(beatId: string, formData: FormData) {
           previewPath = regenResult.previewPath;
         }
         previewWarning = regenResult.previewWarning;
+        previewGenerated = regenResult.previewGenerated;
       }
     }
 
@@ -485,7 +520,21 @@ export async function updateBeat(beatId: string, formData: FormData) {
       successMessage = "WAV mis à jour.";
     }
 
-    return { success: true, previewWarning, successMessage };
+    const { previewMessage, noPreviewNotice } = buildPreviewAdminFeedback(
+      previewPath,
+      previewWarning,
+      previewGenerated,
+      previewAttempted,
+      nextStatus,
+    );
+
+    return {
+      success: true,
+      previewWarning,
+      previewMessage,
+      noPreviewNotice,
+      successMessage,
+    };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Mise à jour échouée.";
     return { error: message };
@@ -555,9 +604,7 @@ export async function regenerateBeatPreview(beatId: string) {
 
     if (!regenResult.previewPath) {
       return {
-        error:
-          regenResult.previewWarning ??
-          "Impossible de générer la preview automatiquement.",
+        error: regenResult.previewWarning ?? PREVIEW_SKIPPED_MESSAGE,
       };
     }
 
@@ -576,7 +623,7 @@ export async function regenerateBeatPreview(beatId: string) {
     revalidatePath("/");
     revalidatePath("/admin");
     revalidatePath(`/beats/${existing.slug}`);
-    return { success: true };
+    return { success: true, previewMessage: PREVIEW_GENERATED_MESSAGE };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Erreur inconnue.";
     return { error: message };

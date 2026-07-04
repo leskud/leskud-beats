@@ -9,6 +9,10 @@ import {
   regenerateBeatPreview,
   updateBeatStatus,
 } from "@/lib/admin/actions";
+import {
+  NO_PREVIEW_PLAYER_MESSAGE,
+  PREVIEW_GENERATED_MESSAGE,
+} from "@/lib/audio/preview-messages";
 import { STORAGE_BUCKETS } from "@/lib/constants";
 import { formatDuration, getPublicStorageUrl } from "@/lib/utils";
 import type { Beat } from "@/types/database";
@@ -42,7 +46,7 @@ export function BeatList({ beats }: BeatListProps) {
         return;
       }
       router.refresh();
-      alert(`Preview filigranée régénérée pour « ${title} ».`);
+      alert(result.previewMessage ?? PREVIEW_GENERATED_MESSAGE);
     });
   }
 
@@ -113,6 +117,11 @@ export function BeatList({ beats }: BeatListProps) {
                   {formatDuration(beat.duration_seconds)}
                 </p>
                 <p className="text-xs text-muted">/{beat.slug}</p>
+                {beat.status === "published" && !beat.preview_path ? (
+                  <p className="mt-1 text-xs text-gold">
+                    {NO_PREVIEW_PLAYER_MESSAGE}
+                  </p>
+                ) : null}
               </div>
             </div>
 

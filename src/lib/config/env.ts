@@ -247,7 +247,7 @@ export function isR2Configured(): boolean {
   );
 }
 
-/** Désactiver avec PREVIEW_GENERATION_ENABLED=false (recommandé sur Vercel si FFmpeg indisponible). */
+/** Activer/désactiver la génération auto (défaut : true). Mettre false seulement en secours. */
 export function isPreviewGenerationEnabled(): boolean {
   const raw = process.env.PREVIEW_GENERATION_ENABLED;
   if (raw === undefined || raw.trim() === "") return true;
