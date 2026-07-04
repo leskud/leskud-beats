@@ -25,8 +25,7 @@ export async function POST(request: Request) {
     if (body.acceptedImmediateAccess !== true) {
       return NextResponse.json(
         {
-          error:
-            "Tu dois accepter l'accès immédiat aux fichiers numériques.",
+          error: "Tu dois accepter la livraison immédiate de tes fichiers.",
         },
         { status: 400 },
       );

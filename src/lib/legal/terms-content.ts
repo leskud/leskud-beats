@@ -31,7 +31,7 @@ export const CGV_CONTENT = {
     },
     {
       heading: "7. Droit de rétractation",
-      body: "Conformément à l'article L221-28 du Code de la consommation, le droit de rétractation ne s'applique pas aux contenus numériques fournis immédiatement après achat, lorsque l'acheteur a expressément demandé l'accès immédiat et reconnu que le téléchargement peut entraîner la renonciation au droit de rétractation lorsque la loi le permet.",
+      body: "En choisissant la livraison immédiate des fichiers numériques, le client accepte que l'exécution commence avant la fin du délai légal de rétractation. Une fois le téléchargement lancé, le droit de rétractation ne pourra plus être exercé pour les fichiers concernés.",
     },
     {
       heading: "8. Licence d'utilisation",

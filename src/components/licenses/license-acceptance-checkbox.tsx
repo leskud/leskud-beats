@@ -50,25 +50,29 @@ export function LicenseAcceptanceCheckbox({
         </span>
       </label>
 
-      <label
-        htmlFor="license-acceptance-access"
-        className="flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-background/40 p-4 text-left text-sm"
-      >
-        <input
-          id="license-acceptance-access"
-          type="checkbox"
-          checked={acceptedImmediateAccess}
-          onChange={(event) =>
-            onAcceptedImmediateAccessChange(event.target.checked)
-          }
-          className="mt-0.5 h-4 w-4 shrink-0 accent-gold"
-        />
-        <span className="text-muted">
-          Je demande l&apos;accès immédiat aux fichiers numériques et je
-          reconnais que le téléchargement peut entraîner la renonciation au
-          droit de rétractation lorsque la loi le permet.
-        </span>
-      </label>
+      <div className="rounded-lg border border-border bg-background/40 p-4 text-left text-sm">
+        <label
+          htmlFor="license-acceptance-access"
+          className="flex cursor-pointer items-start gap-3"
+        >
+          <input
+            id="license-acceptance-access"
+            type="checkbox"
+            checked={acceptedImmediateAccess}
+            onChange={(event) =>
+              onAcceptedImmediateAccessChange(event.target.checked)
+            }
+            className="mt-0.5 h-4 w-4 shrink-0 accent-gold"
+          />
+          <span className="font-medium text-foreground">
+            Recevoir mes fichiers immédiatement après paiement.
+          </span>
+        </label>
+        <p className="mt-2 pl-7 text-xs text-muted">
+          En lançant le téléchargement, l&apos;achat devient définitif pour ces
+          fichiers numériques.
+        </p>
+      </div>
     </div>
   );
 }

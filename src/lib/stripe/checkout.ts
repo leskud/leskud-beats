@@ -16,7 +16,7 @@ const checkoutInputSchema = z.object({
     message: "Tu dois accepter les CGV et la licence associée.",
   }),
   acceptedImmediateAccess: z.literal(true, {
-    message: "Tu dois accepter l'accès immédiat aux fichiers numériques.",
+    message: "Tu dois accepter la livraison immédiate de tes fichiers.",
   }),
   termsVersion: z.string(),
   licenseVersion: z.string(),
