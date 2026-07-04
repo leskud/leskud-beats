@@ -42,6 +42,17 @@ const serverEnvSchema = z
           message:
             "NEXT_PUBLIC_APP_URL ne doit pas pointer vers localhost en production.",
         });
+      } else if (
+        /^https?:\/\/leskud-beats-[a-z0-9-]+\.vercel\.app/i.test(
+          env.NEXT_PUBLIC_APP_URL,
+        )
+      ) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["NEXT_PUBLIC_APP_URL"],
+          message:
+            "NEXT_PUBLIC_APP_URL ne doit pas être une URL preview Vercel.",
+        });
       }
 
       if (!env.DOWNLOAD_TOKEN_SECRET || env.DOWNLOAD_TOKEN_SECRET.length < 32) {
@@ -95,22 +106,9 @@ export function getServerEnv(): ServerEnv {
   return cachedEnv;
 }
 
-const DEV_APP_URL = "http://localhost:3000";
+export { getAppUrl, DEV_APP_URL } from "@/lib/config/app-url";
+
 const DEV_DOWNLOAD_SECRET = "dev-download-token-secret-change-me";
-
-export function getAppUrl(): string {
-  const env = getServerEnv();
-  const raw = env.NEXT_PUBLIC_APP_URL;
-
-  if (isProduction) {
-    if (!raw) {
-      throw new Error("NEXT_PUBLIC_APP_URL est obligatoire en production.");
-    }
-    return raw.replace(/\/$/, "");
-  }
-
-  return (raw ?? DEV_APP_URL).replace(/\/$/, "");
-}
 
 export function getDownloadTokenSecret(): string {
   const env = getServerEnv();

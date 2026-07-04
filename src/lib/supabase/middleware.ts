@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { getAppUrl, getCanonicalRedirectUrl } from "@/lib/config/app-url";
 
 const PUBLIC_PATHS = ["/", "/beats", "/cart", "/legal", "/download", "/checkout"];
 const AUTH_PATHS = ["/login", "/register"];
@@ -17,6 +18,10 @@ function isPublicPath(pathname: string): boolean {
   return false;
 }
 
+function absolutePath(pathname: string, search = ""): URL {
+  return new URL(`${pathname}${search}`, getAppUrl());
+}
+
 function copyCookies(from: NextResponse, to: NextResponse) {
   from.cookies.getAll().forEach(({ name, value, ...options }) => {
     to.cookies.set(name, value, options);
@@ -24,6 +29,17 @@ function copyCookies(from: NextResponse, to: NextResponse) {
 }
 
 export async function updateSession(request: NextRequest) {
+  const host = request.headers.get("host") ?? "";
+  const canonicalRedirect = getCanonicalRedirectUrl(
+    host,
+    request.nextUrl.pathname,
+    request.nextUrl.search,
+  );
+
+  if (canonicalRedirect) {
+    return NextResponse.redirect(canonicalRedirect, 308);
+  }
+
   let supabaseResponse = NextResponse.next({ request });
 
   const supabase = createServerClient(
@@ -54,9 +70,7 @@ export async function updateSession(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   if (user && AUTH_PATHS.includes(pathname)) {
-    const redirectResponse = NextResponse.redirect(
-      new URL("/account", request.url),
-    );
+    const redirectResponse = NextResponse.redirect(absolutePath("/account"));
     copyCookies(supabaseResponse, redirectResponse);
     return redirectResponse;
   }
@@ -66,8 +80,7 @@ export async function updateSession(request: NextRequest) {
   }
 
   if (pathname.startsWith("/account") && !user) {
-    const loginUrl = request.nextUrl.clone();
-    loginUrl.pathname = "/login";
+    const loginUrl = absolutePath("/login");
     loginUrl.searchParams.set("next", pathname);
     const redirectResponse = NextResponse.redirect(loginUrl);
     copyCookies(supabaseResponse, redirectResponse);
@@ -76,8 +89,7 @@ export async function updateSession(request: NextRequest) {
 
   if (pathname.startsWith("/admin")) {
     if (!user) {
-      const loginUrl = request.nextUrl.clone();
-      loginUrl.pathname = "/login";
+      const loginUrl = absolutePath("/login");
       loginUrl.searchParams.set("next", pathname);
       const redirectResponse = NextResponse.redirect(loginUrl);
       copyCookies(supabaseResponse, redirectResponse);
@@ -91,15 +103,14 @@ export async function updateSession(request: NextRequest) {
       .single();
 
     if (!profile?.is_admin) {
-      const redirectResponse = NextResponse.redirect(new URL("/", request.url));
+      const redirectResponse = NextResponse.redirect(absolutePath("/"));
       copyCookies(supabaseResponse, redirectResponse);
       return redirectResponse;
     }
   }
 
   if (!isPublicPath(pathname) && !user) {
-    const loginUrl = request.nextUrl.clone();
-    loginUrl.pathname = "/login";
+    const loginUrl = absolutePath("/login");
     loginUrl.searchParams.set("next", pathname);
     const redirectResponse = NextResponse.redirect(loginUrl);
     copyCookies(supabaseResponse, redirectResponse);

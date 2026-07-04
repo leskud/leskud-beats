@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/service";
 import { loadBeatLicensesForItems } from "@/lib/orders/license-access";
 import {
   buildPurchaseItemViews,
@@ -8,17 +9,26 @@ import type { OrderItem, OrderWithItems } from "@/types/database";
 
 export async function getUserOrdersWithItems(): Promise<OrderWithItems[]> {
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  const { data: orders } = await supabase
+  if (!user?.email) return [];
+
+  const email = user.email.toLowerCase();
+  const service = createServiceClient();
+
+  const { data: orders } = await service
     .from("orders")
     .select("*")
     .eq("status", "paid")
+    .or(`user_id.eq.${user.id},email.eq.${email}`)
     .order("paid_at", { ascending: false });
 
   if (!orders?.length) return [];
 
-  const orderIds = orders.map((o) => o.id);
-  const { data: items } = await supabase
+  const orderIds = orders.map((order) => order.id);
+  const { data: items } = await service
     .from("order_items")
     .select("*")
     .in("order_id", orderIds)

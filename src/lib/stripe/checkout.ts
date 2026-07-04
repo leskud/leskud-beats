@@ -59,7 +59,8 @@ export async function createLicenseCheckout(
     data: { user },
   } = await supabase.auth.getUser();
 
-  const customerEmail = parsed.data.email?.trim().toLowerCase() ?? user?.email;
+  const customerEmail =
+    parsed.data.email?.trim().toLowerCase() ?? user?.email?.toLowerCase();
 
   if (!customerEmail) {
     return {
