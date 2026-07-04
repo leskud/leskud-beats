@@ -9,6 +9,7 @@ import {
 } from "@/components/licenses/license-acceptance-checkbox";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { EXCLUSIVE_SOLD_MESSAGE } from "@/lib/beats/exclusive-messages";
 import { getLicenseAvailability, type LicenseAvailability } from "@/lib/beats/licenses";
 import { LICENSE_DISPLAY_ORDER } from "@/lib/constants";
 import type { LicenseType } from "@/lib/constants";
@@ -18,12 +19,15 @@ import {
   getEntitledFileTypes,
 } from "@/lib/orders/download-entitlements";
 import type { BeatLicense } from "@/types/database";
+import type { BeatStatus } from "@/types";
 import { cn, formatPrice } from "@/lib/utils";
 
 type LicensePricingSectionProps = {
   mode: "home" | "beat";
   beatLicenses?: BeatLicense[];
   userEmail?: string | null;
+  beatStatus?: BeatStatus;
+  exclusiveAlreadySold?: boolean;
 };
 
 function getAvailabilityMap(
@@ -37,6 +41,8 @@ export function LicensePricingSection({
   mode,
   beatLicenses = [],
   userEmail,
+  beatStatus,
+  exclusiveAlreadySold = false,
 }: LicensePricingSectionProps) {
   const [selectedType, setSelectedType] = useState<LicenseType | null>(null);
   const [acceptedTerms, setAcceptedTerms] = useState(false);
@@ -47,7 +53,10 @@ export function LicensePricingSection({
   const availabilityRows = useMemo(() => {
     if (mode === "beat") {
       return LICENSE_DISPLAY_ORDER.map((type) =>
-        getLicenseAvailability(beatLicenses, type),
+        getLicenseAvailability(beatLicenses, type, {
+          beatStatus,
+          exclusiveAlreadySold,
+        }),
       );
     }
 
@@ -59,7 +68,7 @@ export function LicensePricingSection({
           ?.priceCents ?? null,
       licenseId: null,
     })) satisfies LicenseAvailability[];
-  }, [mode, beatLicenses]);
+  }, [mode, beatLicenses, beatStatus, exclusiveAlreadySold]);
 
   const availabilityMap = getAvailabilityMap(beatLicenses, availabilityRows);
 
@@ -186,6 +195,10 @@ export function LicensePricingSection({
                   >
                     Choisir cette licence
                   </Button>
+                ) : availability?.unavailableReason === "exclusive_sold" ? (
+                  <span className="flex h-9 items-center justify-center text-sm text-gold">
+                    {EXCLUSIVE_SOLD_MESSAGE}
+                  </span>
                 ) : (
                   <span className="flex h-9 items-center justify-center text-sm text-muted">
                     Indisponible

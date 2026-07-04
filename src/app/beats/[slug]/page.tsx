@@ -6,6 +6,7 @@ import { PlayBeatButton } from "@/components/beats/play-beat-button";
 import { LicensePricingSection } from "@/components/licenses/license-pricing-section";
 import { STORAGE_BUCKETS } from "@/lib/constants";
 import { getBeatBySlug } from "@/lib/beats/queries";
+import { getExclusivePurchaseBlockState } from "@/lib/beats/exclusive-guard";
 import { getStartingPriceCents } from "@/lib/beats/pricing";
 import { getUser } from "@/lib/supabase/server";
 import {
@@ -36,6 +37,10 @@ export default async function BeatDetailPage({ params }: Props) {
     : null;
 
   const startingPrice = getStartingPriceCents(beat.beat_licenses ?? []);
+  const { exclusiveAlreadySold } = await getExclusivePurchaseBlockState(
+    beat.id,
+    beat.status,
+  );
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
@@ -95,6 +100,8 @@ export default async function BeatDetailPage({ params }: Props) {
           mode="beat"
           beatLicenses={beat.beat_licenses ?? []}
           userEmail={user?.email}
+          beatStatus={beat.status}
+          exclusiveAlreadySold={exclusiveAlreadySold}
         />
       </div>
     </div>

@@ -3,6 +3,7 @@ import {
   LICENSE_LABELS,
   MAX_DOWNLOADS_PER_PURCHASE,
 } from "@/lib/constants";
+import { getExclusivePurchaseBlockState } from "@/lib/beats/exclusive-guard";
 import { createServiceClient } from "@/lib/supabase/service";
 import type { LicenseType } from "@/lib/constants";
 import type Stripe from "stripe";
@@ -123,6 +124,18 @@ export async function fulfillCheckoutSession(
       beatStatus: beat.status,
     });
     return { fulfilled: false, reason: "beat_not_purchasable" };
+  }
+
+  if (licenseType === "exclusive") {
+    const { blocked } = await getExclusivePurchaseBlockState(beatId, beat.status);
+
+    if (blocked) {
+      logFulfill("warn", "exclusive_already_sold", {
+        ...logContext,
+        beatStatus: beat.status,
+      });
+      return { fulfilled: false, reason: "exclusive_already_sold" };
+    }
   }
 
   const totalCents = session.amount_total ?? license.price_cents;

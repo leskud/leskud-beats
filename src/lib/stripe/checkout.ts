@@ -3,6 +3,10 @@ import { z } from "zod";
 import { getAppUrl } from "@/lib/config/env";
 import { LICENSE_LABELS } from "@/lib/constants";
 import { getLicenseAvailability } from "@/lib/beats/licenses";
+import {
+  EXCLUSIVE_SOLD_MESSAGE,
+  getExclusivePurchaseBlockState,
+} from "@/lib/beats/exclusive-guard";
 import { LICENSE_VERSION, TERMS_VERSION } from "@/lib/legal/versions";
 import { createClient } from "@/lib/supabase/server";
 import { getCheckoutProductName } from "@/lib/stripe/fulfill-order";
@@ -93,6 +97,17 @@ export async function createLicenseCheckout(
     return { success: false, error: "Ce beat n'est plus disponible." };
   }
 
+  const licenseType = license.license_type as LicenseType;
+
+  const exclusiveBlockState =
+    licenseType === "exclusive"
+      ? await getExclusivePurchaseBlockState(beat.id, beat.status)
+      : { blocked: false, exclusiveAlreadySold: false };
+
+  if (licenseType === "exclusive" && exclusiveBlockState.blocked) {
+    return { success: false, error: EXCLUSIVE_SOLD_MESSAGE };
+  }
+
   const { data: beatLicenses } = await supabase
     .from("beat_licenses")
     .select("*")
@@ -100,16 +115,22 @@ export async function createLicenseCheckout(
 
   const availability = getLicenseAvailability(
     beatLicenses ?? [],
-    license.license_type as LicenseType,
+    licenseType,
+    {
+      beatStatus: beat.status as "draft" | "published" | "sold_exclusive",
+      exclusiveAlreadySold: exclusiveBlockState.exclusiveAlreadySold,
+    },
   );
 
   if (!availability.available || availability.licenseId !== license.id) {
+    if (licenseType === "exclusive" && exclusiveBlockState.blocked) {
+      return { success: false, error: EXCLUSIVE_SOLD_MESSAGE };
+    }
     return { success: false, error: "Cette licence n'est plus disponible." };
   }
 
   const appUrl = getAppUrl();
   const stripe = getStripe();
-  const licenseType = license.license_type as LicenseType;
   const acceptedAt = new Date().toISOString();
 
   const session = await stripe.checkout.sessions.create({

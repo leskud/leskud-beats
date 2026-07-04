@@ -1,12 +1,19 @@
 import { LICENSE_TYPES, type LicenseType } from "@/lib/constants";
 import { formatPrice } from "@/lib/utils";
 import type { BeatLicense } from "@/types/database";
+import type { BeatStatus } from "@/types";
 
 export type LicenseAvailability = {
   type: LicenseType;
   available: boolean;
   priceCents: number | null;
   licenseId: string | null;
+  unavailableReason?: "exclusive_sold";
+};
+
+export type LicenseAvailabilityContext = {
+  beatStatus?: BeatStatus;
+  exclusiveAlreadySold?: boolean;
 };
 
 function licenseHasFile(license: BeatLicense): boolean {
@@ -34,6 +41,7 @@ function canOfferExclusive(licenses: BeatLicense[]): boolean {
 export function getLicenseAvailability(
   licenses: BeatLicense[],
   type: LicenseType,
+  context?: LicenseAvailabilityContext,
 ): LicenseAvailability {
   const license = licenses.find((l) => l.license_type === type);
   if (!license) {
@@ -52,12 +60,16 @@ export function getLicenseAvailability(
   }
 
   if (type === "exclusive") {
-    const available = canOfferExclusive(licenses);
+    const exclusiveBlocked =
+      context?.beatStatus === "sold_exclusive" ||
+      context?.exclusiveAlreadySold === true;
+    const available = !exclusiveBlocked && canOfferExclusive(licenses);
     return {
       type,
       available,
       priceCents: available ? license.price_cents : null,
       licenseId: available ? license.id : null,
+      unavailableReason: exclusiveBlocked ? "exclusive_sold" : undefined,
     };
   }
 
@@ -73,9 +85,10 @@ export function getLicenseAvailability(
 
 export function getCatalogueLicenseRows(
   licenses: BeatLicense[],
+  context?: LicenseAvailabilityContext,
 ): LicenseAvailability[] {
   return LICENSE_TYPES.filter((t) => t !== "exclusive").map((type) =>
-    getLicenseAvailability(licenses, type),
+    getLicenseAvailability(licenses, type, context),
   );
 }
 
