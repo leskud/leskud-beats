@@ -18,7 +18,7 @@ export function buildDefaultDescription({
 
 ${bpmLabel} BPM · ${keyLabel} · ${genreLabel}
 
-Beat professionnel disponible en licence MP3, WAV, Stems et Exclusive.
+Beat professionnel disponible en licence MP3, WAV, Stems et Unlimited.
 Idéal pour artistes, vidéos et projets créatifs.
 
 © LeSkud — tous droits réservés.`;

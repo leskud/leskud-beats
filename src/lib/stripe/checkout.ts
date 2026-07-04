@@ -101,8 +101,7 @@ export async function createLicenseCheckout(
   if (licenseType === "exclusive") {
     return {
       success: false,
-      error:
-        "L'Exclusive est sur demande. Contactez leskud.contact@gmail.com pour en discuter.",
+      error: "Cette licence n'est pas disponible à l'achat.",
     };
   }
 

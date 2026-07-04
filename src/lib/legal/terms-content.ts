@@ -7,11 +7,11 @@ export const CGV_CONTENT = {
   sections: [
     {
       heading: "1. Objet",
-      body: "Les présentes Conditions Générales de Vente (CGV) régissent la vente de licences d'utilisation d'instrumentales numériques sur le site LeSkud Beats, édité par LeSkud Beats. Chaque achat correspond à une licence non-exclusive définie sur la page Licences, sauf accord écrit distinct pour une licence exclusive.",
+      body: "Les présentes Conditions Générales de Vente (CGV) régissent la vente de licences d'utilisation d'instrumentales numériques sur le site LeSkud Beats, édité par LeSkud Beats. Chaque achat correspond à une licence non-exclusive définie sur la page Licences.",
     },
     {
       heading: "2. Produits vendus",
-      body: "LeSkud Beats commercialise des licences d'utilisation d'instrumentales (MP3, Premium WAV, Premium + Stems, Unlimited + Stems). Les fichiers livrés et les droits accordés dépendent de la licence achetée. La licence Exclusive n'est pas vendue automatiquement sur le site : elle fait l'objet d'une demande et d'un accord préalable.",
+      body: "LeSkud Beats commercialise des licences d'utilisation d'instrumentales (MP3, Premium WAV, Premium + Stems, Unlimited + Stems). Les fichiers livrés et les droits accordés dépendent de la licence achetée.",
     },
     {
       heading: "3. Prix",
@@ -50,23 +50,19 @@ export const CGV_CONTENT = {
       body: "Aucun remboursement n'est accordé après téléchargement des fichiers, sauf problème technique avéré empêchant l'accès aux fichiers achetés ou obligation légale impérative.",
     },
     {
-      heading: "12. Licence Exclusive",
-      body: "La licence Exclusive n'est pas disponible en achat automatique sur le site. Elle fait l'objet d'une demande par email et d'un accord écrit. En cas de vente exclusive conclue hors site, le beat est retiré du catalogue ; les licences non-exclusives déjà vendues restent valables pour leurs titulaires.",
-    },
-    {
-      heading: "13. Support",
+      heading: "12. Support",
       body: `Pour toute question : ${CONTACT_EMAIL}`,
     },
     {
-      heading: "14. Médiation consommation",
+      heading: "13. Médiation consommation",
       body: "Conformément aux articles L612-1 et suivants du Code de la consommation, le client peut recourir gratuitement à un médiateur de la consommation en vue de la résolution amiable d'un litige. Médiateur compétent : [à compléter].",
     },
     {
-      heading: "15. Droit applicable",
+      heading: "14. Droit applicable",
       body: "Les présentes CGV sont soumises au droit français. En cas de litige, les tribunaux français seront compétents, sous réserve des dispositions légales impératives applicables aux consommateurs.",
     },
     {
-      heading: "16. Version applicable",
+      heading: "15. Version applicable",
       body: `Version en vigueur : ${TERMS_VERSION}. La version acceptée au moment de l'achat est enregistrée avec la commande.`,
     },
   ],
@@ -76,11 +72,10 @@ export const LICENSE_PAGE_INTRO = {
   version: LICENSE_VERSION,
   title: "Licences",
   subtitle:
-    "Quatre licences publiques non-exclusives pour sortir ta musique. L'Exclusive est disponible sur demande.",
+    "Quatre licences non-exclusives pour sortir ta musique.",
   footerNotes: [
     "Crédit obligatoire : « prod. LeSkud » sur les plateformes lorsque c'est possible.",
     "Tu ne peux pas revendre l'instrumental seul ni les stems seuls.",
-    "L'Exclusive retire la prod du catalogue après accord écrit — contacte-nous pour en discuter.",
     "LeSkud Beats reste propriétaire de l'instrumental ; tu restes propriétaire de tes paroles et de ton vocal.",
   ],
 } as const;

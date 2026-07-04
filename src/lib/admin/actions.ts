@@ -116,20 +116,13 @@ async function refreshBeatLicenseAvailability(
 
   if (!updatedLicenses) return;
 
-  const canExclusive =
-    updatedLicenses.some(
-      (l) => l.license_type === "mp3" && l.storage_path && l.is_available,
-    ) &&
-    updatedLicenses.some(
-      (l) => l.license_type === "wav" && l.storage_path && l.is_available,
-    );
   const hasStems = updatedLicenses.some(
     (l) => l.license_type === "stems" && l.storage_path && l.is_available,
   );
 
   await supabase
     .from("beat_licenses")
-    .update({ is_available: canExclusive })
+    .update({ is_available: false })
     .eq("beat_id", beatId)
     .eq("license_type", "exclusive");
 

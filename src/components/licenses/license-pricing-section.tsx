@@ -9,15 +9,13 @@ import {
 } from "@/components/licenses/license-acceptance-checkbox";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { EXCLUSIVE_SOLD_MESSAGE } from "@/lib/beats/exclusive-messages";
 import { getLicenseAvailability, type LicenseAvailability } from "@/lib/beats/licenses";
 import { LICENSE_DISPLAY_ORDER } from "@/lib/constants";
-import type { LicenseType } from "@/lib/constants";
+import type { PublicCheckoutLicenseType } from "@/lib/constants";
 import {
-  buildExclusiveMailto,
   formatLicensePriceDisplay,
   getLicenseDefinition,
-  LICENSE_DEFINITIONS,
+  PUBLIC_LICENSE_DEFINITIONS,
 } from "@/lib/legal/license-definitions";
 import {
   DOWNLOAD_FILE_LABELS,
@@ -32,15 +30,16 @@ type LicensePricingSectionProps = {
   beatLicenses?: BeatLicense[];
   userEmail?: string | null;
   beatStatus?: BeatStatus;
-  exclusiveAlreadySold?: boolean;
   beatTitle?: string;
 };
 
 function getAvailabilityMap(
   beatLicenses: BeatLicense[],
   availabilityRows: LicenseAvailability[],
-): Map<LicenseType, LicenseAvailability> {
-  return new Map(availabilityRows.map((row) => [row.type, row]));
+): Map<PublicCheckoutLicenseType, LicenseAvailability> {
+  return new Map(
+    availabilityRows.map((row) => [row.type as PublicCheckoutLicenseType, row]),
+  );
 }
 
 export function LicensePricingSection({
@@ -48,10 +47,10 @@ export function LicensePricingSection({
   beatLicenses = [],
   userEmail,
   beatStatus,
-  exclusiveAlreadySold = false,
-  beatTitle = "ce beat",
 }: LicensePricingSectionProps) {
-  const [selectedType, setSelectedType] = useState<LicenseType | null>(null);
+  const [selectedType, setSelectedType] = useState<PublicCheckoutLicenseType | null>(
+    null,
+  );
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [acceptedImmediateAccess, setAcceptedImmediateAccess] = useState(false);
   const [email, setEmail] = useState(userEmail ?? "");
@@ -61,40 +60,25 @@ export function LicensePricingSection({
   const availabilityRows = useMemo(() => {
     return LICENSE_DISPLAY_ORDER.map((type) => {
       if (mode === "beat") {
-        return getLicenseAvailability(beatLicenses, type, {
-          beatStatus,
-          exclusiveAlreadySold,
-          beatTitle,
-        });
+        return getLicenseAvailability(beatLicenses, type, { beatStatus });
       }
 
       const definition = getLicenseDefinition(type)!;
       return {
         type,
-        available: definition.pricingMode === "fixed",
+        available: true,
         priceCents: definition.priceCents,
         licenseId: null,
-        unavailableReason:
-          definition.pricingMode === "on_request"
-            ? ("exclusive_on_request" as const)
-            : undefined,
-        unavailableLabel:
-          definition.pricingMode === "on_request" ? "Sur demande" : undefined,
       } satisfies LicenseAvailability;
     });
-  }, [mode, beatLicenses, beatStatus, exclusiveAlreadySold, beatTitle]);
+  }, [mode, beatLicenses, beatStatus]);
 
   const availabilityMap = getAvailabilityMap(beatLicenses, availabilityRows);
 
   const acceptanceComplete = acceptedTerms && acceptedImmediateAccess;
 
-  async function handleBuy(licenseType: LicenseType) {
+  async function handleBuy(licenseType: PublicCheckoutLicenseType) {
     setError(null);
-
-    if (licenseType === "exclusive") {
-      setError("L'Exclusive est sur demande — utilise le bouton de contact.");
-      return;
-    }
 
     const availability = availabilityMap.get(licenseType);
     if (!availability?.licenseId) return;
@@ -142,7 +126,7 @@ export function LicensePricingSection({
   }
 
   function renderActionButton(
-    definition: (typeof LICENSE_DEFINITIONS)[number],
+    definition: (typeof PUBLIC_LICENSE_DEFINITIONS)[number],
     availability: LicenseAvailability | undefined,
     isSelected: boolean,
   ) {
@@ -154,25 +138,6 @@ export function LicensePricingSection({
         >
           Plus d&apos;infos
         </Link>
-      );
-    }
-
-    if (definition.pricingMode === "on_request") {
-      if (availability?.unavailableReason === "exclusive_sold") {
-        return (
-          <span className="flex h-9 items-center justify-center text-sm text-gold">
-            {EXCLUSIVE_SOLD_MESSAGE}
-          </span>
-        );
-      }
-
-      return (
-        <a
-          href={buildExclusiveMailto(beatTitle)}
-          className="inline-flex h-9 w-full items-center justify-center rounded-lg border border-gold/40 text-sm text-gold transition-colors hover:bg-gold/10"
-        >
-          Demander l&apos;exclusive
-        </a>
       );
     }
 
@@ -209,16 +174,15 @@ export function LicensePricingSection({
       <div className="mb-8">
         <h2 className="text-2xl font-semibold">Les licences</h2>
         <p className="mt-2 max-w-2xl text-sm text-muted">
-          Quatre licences non-exclusives pour sortir ta musique. L&apos;Exclusive
-          est disponible sur demande.
+          Quatre licences non-exclusives pour sortir ta musique.
           {mode === "home"
             ? " Consulte le détail complet avant d'acheter."
             : " Choisis ta licence et finalise ton achat."}
         </p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {LICENSE_DEFINITIONS.map((definition) => {
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {PUBLIC_LICENSE_DEFINITIONS.map((definition) => {
           const availability = availabilityMap.get(definition.type);
           const isCheckoutable =
             mode === "beat" && Boolean(availability?.available && availability.licenseId);
@@ -241,10 +205,7 @@ export function LicensePricingSection({
                   : isHighlighted
                     ? "border-gold/30"
                     : "border-border",
-                !isCheckoutable &&
-                  mode === "beat" &&
-                  definition.pricingMode !== "on_request" &&
-                  "opacity-80",
+                !isCheckoutable && mode === "beat" && "opacity-80",
               )}
             >
               {isHighlighted ? (
@@ -259,13 +220,6 @@ export function LicensePricingSection({
                   {formatLicensePriceDisplay(definition)}
                 </p>
               </div>
-
-              {definition.pricingMode === "on_request" ? (
-                <p className="mt-2 text-sm text-muted">
-                  Pour acheter cette prod en exclusivité, contactez-moi.
-                  L&apos;exclusive retire la prod du catalogue après accord écrit.
-                </p>
-              ) : null}
 
               <p className="mt-3 text-xs uppercase tracking-wide text-muted">
                 Fichiers inclus
@@ -292,7 +246,6 @@ export function LicensePricingSection({
 
       {mode === "beat" &&
       selectedType &&
-      selectedType !== "exclusive" &&
       availabilityMap.get(selectedType)?.licenseId ? (
         <div className="mt-8 max-w-xl space-y-4 rounded-xl border border-border bg-surface p-6">
           {!userEmail ? (

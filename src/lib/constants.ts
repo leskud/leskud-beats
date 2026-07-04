@@ -29,13 +29,9 @@ export const PUBLIC_CHECKOUT_LICENSE_TYPES = [
 export type PublicCheckoutLicenseType =
   (typeof PUBLIC_CHECKOUT_LICENSE_TYPES)[number];
 
-/** Ordre d'affichage grille commerciale */
-export const LICENSE_DISPLAY_ORDER: LicenseType[] = [
-  "mp3",
-  "wav",
-  "stems",
-  "unlimited",
-  "exclusive",
+/** Ordre d'affichage grille commerciale (site public) */
+export const LICENSE_DISPLAY_ORDER: PublicCheckoutLicenseType[] = [
+  ...PUBLIC_CHECKOUT_LICENSE_TYPES,
 ];
 
 export const DEFAULT_LICENSE_PRICES: Record<LicenseType, number> = {
@@ -54,6 +50,7 @@ export const LICENSE_LABELS: Record<LicenseType, string> = {
   exclusive: "Exclusive",
 };
 
+/** Libellés legacy (certificats / commandes exclusive historiques) */
 export const EXCLUSIVE_ON_REQUEST_LABEL = "Sur demande";
 export const EXCLUSIVE_PRICE_HINT = "À partir de 299 €";
 

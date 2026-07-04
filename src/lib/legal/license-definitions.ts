@@ -1,9 +1,10 @@
-import type { LicenseType } from "@/lib/constants";
+import type { LicenseType, PublicCheckoutLicenseType } from "@/lib/constants";
 import {
   DEFAULT_LICENSE_PRICES,
   EXCLUSIVE_ON_REQUEST_LABEL,
   EXCLUSIVE_PRICE_HINT,
   LICENSE_LABELS,
+  PUBLIC_CHECKOUT_LICENSE_TYPES,
 } from "@/lib/constants";
 
 export type LicensePricingMode = "fixed" | "on_request";
@@ -140,6 +141,17 @@ export const LICENSE_DEFINITIONS: LicenseDefinition[] = [
   },
 ];
 
+export type PublicLicenseDefinition = Omit<LicenseDefinition, "type"> & {
+  type: PublicCheckoutLicenseType;
+};
+
+/** Définitions affichées sur le site public (hors exclusive legacy) */
+export const PUBLIC_LICENSE_DEFINITIONS: PublicLicenseDefinition[] =
+  PUBLIC_CHECKOUT_LICENSE_TYPES.map((type) => {
+    const definition = LICENSE_DEFINITIONS.find((d) => d.type === type)!;
+    return { ...definition, type };
+  });
+
 export const LICENSE_FAQ = [
   {
     question: "Puis-je sortir le morceau sur Spotify ?",
@@ -154,11 +166,6 @@ export const LICENSE_FAQ = [
   {
     question: "Puis-je revendre les stems ?",
     answer: "Non. La revente ou redistribution des stems seuls est interdite.",
-  },
-  {
-    question: "Puis-je acheter l'exclusive ?",
-    answer:
-      "L'exclusive est sur demande. Contacte leskud.contact@gmail.com pour discuter du projet, du prix et des conditions.",
   },
   {
     question: "Que se passe-t-il si je dépasse les limites de ma licence ?",
@@ -184,13 +191,10 @@ export function formatLicensePriceDisplay(definition: LicenseDefinition): string
   }).format(definition.priceCents / 100);
 }
 
-export function buildExclusiveMailto(
-  beatTitle: string,
-  email = "leskud.contact@gmail.com",
-): string {
-  const subject = encodeURIComponent(`Demande exclusive — ${beatTitle}`);
-  const body = encodeURIComponent(
-    `Bonjour LeSkud,\n\nJe souhaite discuter d'une licence exclusive pour la prod « ${beatTitle} ».\n\nMon nom d'artiste : …\nMon projet : …\n\nCordialement,`,
+export function isPublicLicenseType(
+  type: LicenseType,
+): type is PublicCheckoutLicenseType {
+  return PUBLIC_CHECKOUT_LICENSE_TYPES.includes(
+    type as PublicCheckoutLicenseType,
   );
-  return `mailto:${email}?subject=${subject}&body=${body}`;
 }

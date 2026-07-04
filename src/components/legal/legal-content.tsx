@@ -1,11 +1,10 @@
 import Link from "next/link";
 import {
-  buildExclusiveMailto,
   formatLicensePriceDisplay,
   getLicenseDefinition,
-  LICENSE_DEFINITIONS,
   LICENSE_FAQ,
   PROPERTY_NOTICE,
+  PUBLIC_LICENSE_DEFINITIONS,
 } from "@/lib/legal/license-definitions";
 import { CGV_CONTENT, LICENSE_PAGE_INTRO } from "@/lib/legal/terms-content";
 import {
@@ -140,8 +139,6 @@ function ComparisonTable() {
 }
 
 export function LicencesContent() {
-  const exclusive = getLicenseDefinition("exclusive")!;
-
   return (
     <LegalDocumentLayout
       title={LICENSE_PAGE_INTRO.title}
@@ -156,7 +153,7 @@ export function LicencesContent() {
       </section>
 
       <div className="space-y-6">
-        {LICENSE_DEFINITIONS.map((license) => (
+        {PUBLIC_LICENSE_DEFINITIONS.map((license) => (
           <article
             key={license.type}
             className="rounded-xl border border-border bg-surface p-6"
@@ -204,21 +201,6 @@ export function LicencesContent() {
           </article>
         ))}
       </div>
-
-      <section className="rounded-xl border border-gold/30 bg-gold/5 p-6">
-        <h2 className="text-lg font-medium text-gold">{exclusive.commercialName} — sur demande</h2>
-        <p className="mt-3 text-sm text-muted">
-          Pour acheter une prod en exclusivité, contactez LeSkud. L&apos;exclusive
-          retire la prod du catalogue après accord écrit. Prix et conditions
-          définis au cas par cas ({exclusive.priceDisplay}).
-        </p>
-        <a
-          href={buildExclusiveMailto("votre beat")}
-          className="mt-4 inline-flex h-10 items-center justify-center rounded-lg border border-gold/40 px-4 text-sm text-gold transition-colors hover:bg-gold/10"
-        >
-          Demander l&apos;exclusive
-        </a>
-      </section>
 
       <section>
         <h2 className="text-lg font-medium text-gold">FAQ</h2>

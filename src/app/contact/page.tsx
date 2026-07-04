@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { CONTACT_EMAIL } from "@/lib/constants";
-import { buildExclusiveMailto } from "@/lib/legal/license-definitions";
 
 export const metadata = {
   title: "Contact",
@@ -36,12 +35,13 @@ export default function ContactPage() {
 
   const customLicenseMailto = `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent("Demande licence personnalisée")}&body=${encodeURIComponent("Bonjour LeSkud,\n\nJe souhaite discuter d'une licence personnalisée.\n\nMon nom d'artiste : …\nMon projet : …\n\nCordialement,")}`;
 
+  const otherMailto = `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent("Autre demande LeSkud Beats")}&body=${encodeURIComponent("Bonjour LeSkud,\n\nMon nom / nom d'artiste : …\nMon message : …\n\nCordialement,")}`;
+
   return (
     <div className="mx-auto max-w-3xl px-4 py-16 sm:px-6 lg:px-8">
       <h1 className="text-3xl font-semibold">Contact</h1>
       <p className="mt-3 text-muted">
-        Une question sur une licence, un achat ou une demande exclusive ?
-        Écris-nous directement.
+        Une question sur une licence ou un achat ? Écris-nous directement.
       </p>
 
       <p className="mt-6 text-sm">
@@ -56,13 +56,6 @@ export default function ContactPage() {
 
       <div className="mt-10 space-y-4">
         <ContactBlock
-          title="Demande exclusive"
-          description="Tu veux acheter une prod en exclusivité ? Décris ton projet et on en discute."
-          mailtoHref={buildExclusiveMailto("votre beat")}
-          buttonLabel="Demander l'exclusive"
-        />
-
-        <ContactBlock
           title="Problème avec un achat"
           description="Fichier manquant, erreur de téléchargement ou question sur ta commande."
           mailtoHref={supportMailto}
@@ -75,6 +68,13 @@ export default function ContactPage() {
           mailtoHref={customLicenseMailto}
           buttonLabel="Demander une licence sur mesure"
         />
+
+        <ContactBlock
+          title="Autre demande"
+          description="Partenariat, question générale ou autre sujet."
+          mailtoHref={otherMailto}
+          buttonLabel="Nous écrire"
+        />
       </div>
 
       <section className="mt-10 rounded-xl border border-border bg-surface p-6">
@@ -86,7 +86,7 @@ export default function ContactPage() {
         <ul className="mt-3 space-y-1 text-sm text-muted">
           <li>· Nom / nom d&apos;artiste</li>
           <li>· Email</li>
-          <li>· Sujet (achat, exclusive, support, autre)</li>
+          <li>· Sujet (achat, support, licence, autre)</li>
           <li>· Beat concerné (optionnel)</li>
           <li>· Message</li>
         </ul>
