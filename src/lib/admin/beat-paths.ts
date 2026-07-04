@@ -46,6 +46,12 @@ export function getBeatFileLabel(kind: BeatFileKind): string {
   }
 }
 
+export const PAID_BEAT_FILE_KINDS = ["mp3", "wav", "stems"] as const;
+
+export function isPaidBeatFileKind(kind: BeatFileKind): boolean {
+  return (PAID_BEAT_FILE_KINDS as readonly string[]).includes(kind);
+}
+
 export function resolveCoverPath(beatId: string, filename: string): string {
   const ext = filename.includes(".")
     ? `.${filename.split(".").pop()!.toLowerCase()}`

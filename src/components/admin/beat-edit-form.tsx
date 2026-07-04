@@ -71,7 +71,7 @@ export function BeatEditForm({ beat }: BeatEditFormProps) {
       const hasLargeUpload = Boolean(wav || stems || mp3);
 
       if (hasLargeUpload) {
-        setStatusMessage("Préparation de l'upload vers Supabase…");
+        setStatusMessage("Préparation de l'upload (R2 / Supabase)…");
       }
 
       const uploadedPaths = await uploadBeatFilesFromBrowser(
@@ -107,10 +107,16 @@ export function BeatEditForm({ beat }: BeatEditFormProps) {
 
       const data = (await response.json().catch(() => null)) as {
         error?: string;
+        previewWarning?: string | null;
       } | null;
 
       if (!response.ok || data?.error) {
         setError(data?.error ?? "Mise à jour échouée.");
+        return;
+      }
+
+      if (data?.previewWarning) {
+        setStatusMessage(data.previewWarning);
         return;
       }
 
@@ -329,9 +335,8 @@ export function BeatEditForm({ beat }: BeatEditFormProps) {
       <section className="space-y-4">
         <h2 className="text-lg font-medium">Remplacer des fichiers (optionnel)</h2>
         <p className="text-sm text-muted">
-          Les fichiers MP3, WAV et Stems sont envoyés directement vers Supabase
-          Storage (contourne la limite Vercel). Laissez vide pour conserver les
-          fichiers actuels.
+          Cover → Supabase Storage. MP3, WAV et Stems → Cloudflare R2 (contourne
+          la limite Vercel). Laissez vide pour conserver les fichiers actuels.
         </p>
         <label className="flex items-center gap-2 text-sm">
           <input

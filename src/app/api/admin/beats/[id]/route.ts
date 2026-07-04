@@ -16,7 +16,10 @@ export async function PATCH(request: Request, context: RouteContext) {
       return NextResponse.json({ error: result.error }, { status: 400 });
     }
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({
+      success: true,
+      previewWarning: result.previewWarning ?? null,
+    });
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Erreur serveur inattendue.";

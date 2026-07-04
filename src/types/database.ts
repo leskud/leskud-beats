@@ -35,6 +35,7 @@ export type BeatLicense = {
   license_type: LicenseType;
   price_cents: number;
   storage_path: string | null;
+  storage_provider: "supabase" | "r2";
   is_available: boolean;
   created_at: string;
   updated_at: string;

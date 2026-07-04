@@ -5,6 +5,16 @@ import {
   type BeatFileKind,
 } from "@/lib/admin/beat-paths";
 
+type UploadPrepareResponse = {
+  provider?: "r2" | "supabase";
+  bucket?: string;
+  path?: string;
+  token?: string;
+  uploadUrl?: string;
+  contentType?: string;
+  error?: string;
+};
+
 export async function uploadBeatFileFromBrowser(
   beatId: string,
   kind: BeatFileKind,
@@ -19,25 +29,54 @@ export async function uploadBeatFileFromBrowser(
     }),
   });
 
-  const prepareData = (await prepareResponse.json().catch(() => null)) as {
-    error?: string;
-    bucket?: string;
-    path?: string;
-    token?: string;
-  } | null;
+  const prepareData = (await prepareResponse.json().catch(
+    () => null,
+  )) as UploadPrepareResponse | null;
 
-  if (!prepareResponse.ok || !prepareData?.path || !prepareData.token) {
+  if (!prepareResponse.ok || !prepareData?.path) {
     throw new Error(
       prepareData?.error ??
         `Impossible de préparer l'upload ${getBeatFileLabel(kind)}.`,
     );
   }
 
+  const contentType = file.type || prepareData.contentType || getBeatFileContentType(kind);
+
+  if (prepareData.provider === "r2") {
+    if (!prepareData.uploadUrl) {
+      throw new Error(
+        `Impossible de préparer l'upload R2 ${getBeatFileLabel(kind)}.`,
+      );
+    }
+
+    const uploadResponse = await fetch(prepareData.uploadUrl, {
+      method: "PUT",
+      body: file,
+      headers: {
+        "Content-Type": contentType,
+      },
+    });
+
+    if (!uploadResponse.ok) {
+      throw new Error(
+        `Upload ${getBeatFileLabel(kind)} échoué (R2 ${uploadResponse.status}).`,
+      );
+    }
+
+    return prepareData.path;
+  }
+
+  if (!prepareData.token || !prepareData.bucket) {
+    throw new Error(
+      `Impossible de préparer l'upload ${getBeatFileLabel(kind)}.`,
+    );
+  }
+
   const supabase = createClient();
   const { error } = await supabase.storage
-    .from(prepareData.bucket!)
+    .from(prepareData.bucket)
     .uploadToSignedUrl(prepareData.path, prepareData.token, file, {
-      contentType: file.type || getBeatFileContentType(kind),
+      contentType,
       upsert: true,
     });
 
@@ -63,7 +102,9 @@ export async function uploadBeatFilesFromBrowser(
     const file = files[kind];
     if (!file?.size) continue;
 
-    onProgress?.(`Upload ${getBeatFileLabel(kind)} en cours… (${formatMo(file.size)})`);
+    onProgress?.(
+      `Upload ${getBeatFileLabel(kind)} en cours… (${formatMo(file.size)})`,
+    );
     uploaded[kind] = await uploadBeatFileFromBrowser(beatId, kind, file);
     onProgress?.(`Upload ${getBeatFileLabel(kind)} terminé.`);
   }

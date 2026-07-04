@@ -4,7 +4,11 @@ import { parseDownloadFileType } from "@/lib/orders/download-entitlements";
 
 export const runtime = "nodejs";
 
-function attachmentHeaders(filename: string, size: number, contentType: string): HeadersInit {
+function attachmentHeaders(
+  filename: string,
+  size: number,
+  contentType: string,
+): HeadersInit {
   const safe = filename.replace(/[^\w.-]+/g, "_");
   const encoded = encodeURIComponent(filename);
   return {
@@ -44,6 +48,10 @@ export async function GET(request: Request) {
       { error: result.error },
       { status: result.status },
     );
+  }
+
+  if (result.mode === "redirect") {
+    return NextResponse.redirect(result.url, 302);
   }
 
   const body = new Uint8Array(result.buffer);

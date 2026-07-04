@@ -5,11 +5,12 @@ import {
 } from "@/lib/constants";
 import {
   DOWNLOAD_FILE_LABELS,
-  getEntitledFileTypes,
   isEntitledFileType,
   parseDownloadFileType,
   type DownloadFileType,
 } from "@/lib/orders/download-entitlements";
+import { createR2PresignedGetUrl } from "@/lib/storage/r2-presign";
+import { normalizeStorageProvider } from "@/lib/storage/types";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import type { BeatLicense } from "@/types/database";
@@ -36,12 +37,23 @@ type OrderItemRow = {
   };
 };
 
+type BeatLicenseRow = Pick<
+  BeatLicense,
+  "license_type" | "storage_path" | "storage_provider"
+>;
+
 export type PaidDownloadResult =
   | {
       success: true;
+      mode: "stream";
       buffer: Buffer;
       filename: string;
       contentType: string;
+    }
+  | {
+      success: true;
+      mode: "redirect";
+      url: string;
     }
   | { success: false; error: string; status: number };
 
@@ -73,6 +85,8 @@ export function buildPaidDownloadFilename(
 function contentTypeForPath(storagePath: string): string {
   const ext = storagePath.split(".").pop()?.toLowerCase();
   if (ext === "zip") return "application/zip";
+  if (ext === "wav") return "audio/wav";
+  if (ext === "mp3") return "audio/mpeg";
   return "application/octet-stream";
 }
 
@@ -130,16 +144,25 @@ async function loadOrderItem(
   return { item: row, denied: false };
 }
 
-async function loadBeatLicenses(
-  beatId: string,
-): Promise<Pick<BeatLicense, "license_type" | "storage_path">[]> {
+async function loadBeatLicenses(beatId: string): Promise<BeatLicenseRow[]> {
   const service = createServiceClient();
   const { data } = await service
     .from("beat_licenses")
-    .select("license_type, storage_path")
+    .select("license_type, storage_path, storage_provider")
     .eq("beat_id", beatId);
 
   return data ?? [];
+}
+
+async function incrementDownloadCount(
+  orderItemId: string,
+  currentCount: number,
+): Promise<void> {
+  const service = createServiceClient();
+  await service
+    .from("order_items")
+    .update({ download_count: currentCount + 1 })
+    .eq("id", orderItemId);
 }
 
 export async function createPaidDownload(
@@ -170,9 +193,7 @@ export async function createPaidDownload(
   const purchasedLicense = item.license_type as LicenseType;
   const beatLicenses = await loadBeatLicenses(item.beat_id);
 
-  if (
-    !isEntitledFileType(purchasedLicense, beatLicenses, fileType)
-  ) {
+  if (!isEntitledFileType(purchasedLicense, beatLicenses, fileType)) {
     return {
       success: false,
       error: "Ce fichier n'est pas inclus dans ta licence.",
@@ -188,6 +209,32 @@ export async function createPaidDownload(
     return { success: false, error: "Fichier indisponible.", status: 404 };
   }
 
+  const storageProvider = normalizeStorageProvider(
+    fileLicense.storage_provider,
+  );
+  const filename = buildPaidDownloadFilename(
+    item.beat_title,
+    fileType,
+    fileLicense.storage_path,
+  );
+  const contentType = contentTypeForPath(fileLicense.storage_path);
+
+  await incrementDownloadCount(params.orderItemId, item.download_count);
+
+  if (storageProvider === "r2") {
+    const url = await createR2PresignedGetUrl(
+      fileLicense.storage_path,
+      filename,
+      contentType,
+    );
+
+    return {
+      success: true,
+      mode: "redirect",
+      url,
+    };
+  }
+
   const service = createServiceClient();
   const { data: file, error: downloadError } = await service.storage
     .from(STORAGE_BUCKETS.beats)
@@ -197,61 +244,13 @@ export async function createPaidDownload(
     return { success: false, error: "Fichier introuvable.", status: 404 };
   }
 
-  await service
-    .from("order_items")
-    .update({ download_count: item.download_count + 1 })
-    .eq("id", params.orderItemId);
-
   const buffer = Buffer.from(await file.arrayBuffer());
-  const filename = buildPaidDownloadFilename(
-    item.beat_title,
-    fileType,
-    fileLicense.storage_path,
-  );
 
   return {
     success: true,
+    mode: "stream",
     buffer,
     filename,
-    contentType: contentTypeForPath(fileLicense.storage_path),
-  };
-}
-
-export async function getDownloadOptionsForOrderItem(
-  orderItemId: string,
-  sessionId?: string | null,
-): Promise<
-  | {
-      success: true;
-      files: { fileType: DownloadFileType; label: string }[];
-    }
-  | { success: false; error: string; status: number }
-> {
-  const { item, denied } = await loadOrderItem(orderItemId, sessionId);
-
-  if (denied) {
-    return { success: false, error: "Accès refusé.", status: 403 };
-  }
-
-  if (!item) {
-    return { success: false, error: "Achat introuvable.", status: 404 };
-  }
-
-  if (item.orders.status !== "paid") {
-    return { success: false, error: "Commande non payée.", status: 403 };
-  }
-
-  const beatLicenses = await loadBeatLicenses(item.beat_id);
-  const entitled = getEntitledFileTypes(
-    item.license_type as LicenseType,
-    beatLicenses,
-  );
-
-  return {
-    success: true,
-    files: entitled.map((fileType) => ({
-      fileType,
-      label: DOWNLOAD_FILE_LABELS[fileType],
-    })),
+    contentType,
   };
 }

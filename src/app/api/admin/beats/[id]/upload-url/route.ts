@@ -2,7 +2,9 @@ import { NextResponse } from "next/server";
 import {
   BEAT_FILE_KINDS,
   getBeatFileBucket,
+  getBeatFileContentType,
   getBeatFilePath,
+  isPaidBeatFileKind,
   resolveCoverPath,
   type BeatFileKind,
 } from "@/lib/admin/beat-paths";
@@ -10,6 +12,8 @@ import {
   adminErrorResponse,
   requireAdminApi,
 } from "@/lib/admin/require-admin-api";
+import { isR2Configured } from "@/lib/config/env";
+import { createR2PresignedPutUrl } from "@/lib/storage/r2-presign";
 import { createServiceClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
@@ -49,6 +53,26 @@ export async function POST(request: Request, context: RouteContext) {
     );
   }
 
+  if (isPaidBeatFileKind(kind)) {
+    if (!isR2Configured()) {
+      return NextResponse.json(
+        { error: "Stockage R2 non configuré sur le serveur." },
+        { status: 500 },
+      );
+    }
+
+    const path = getBeatFilePath(beatId, kind);
+    const contentType = getBeatFileContentType(kind);
+    const { uploadUrl } = await createR2PresignedPutUrl(path, contentType);
+
+    return NextResponse.json({
+      provider: "r2",
+      path,
+      uploadUrl,
+      contentType,
+    });
+  }
+
   const bucket = getBeatFileBucket(kind);
   const path =
     kind === "cover"
@@ -68,6 +92,7 @@ export async function POST(request: Request, context: RouteContext) {
   }
 
   return NextResponse.json({
+    provider: "supabase",
     bucket,
     path: data.path,
     token: data.token,

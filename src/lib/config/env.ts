@@ -23,6 +23,12 @@ const serverEnvSchema = z
     STRIPE_WEBHOOK_SECRET: z.string().min(1).optional(),
     NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: z.string().min(1).optional(),
     ADMIN_EMAIL: z.string().email().optional(),
+    R2_ACCOUNT_ID: z.string().min(1).optional(),
+    R2_ACCESS_KEY_ID: z.string().min(1).optional(),
+    R2_SECRET_ACCESS_KEY: z.string().min(1).optional(),
+    R2_BUCKET_NAME: z.string().min(1).optional(),
+    R2_ENDPOINT: z.string().url().optional(),
+    R2_REGION: z.string().min(1).optional(),
   })
   .superRefine((env, ctx) => {
     if (isProduction) {
@@ -71,6 +77,24 @@ const serverEnvSchema = z
           message: "RESEND_API_KEY est obligatoire en production.",
         });
       }
+
+      const r2Keys = [
+        "R2_ACCOUNT_ID",
+        "R2_ACCESS_KEY_ID",
+        "R2_SECRET_ACCESS_KEY",
+        "R2_BUCKET_NAME",
+        "R2_ENDPOINT",
+      ] as const;
+
+      for (const key of r2Keys) {
+        if (!env[key]) {
+          ctx.addIssue({
+            code: "custom",
+            path: [key],
+            message: `${key} est obligatoire en production.`,
+          });
+        }
+      }
     }
   });
 
@@ -96,6 +120,12 @@ function readRawEnv(): ServerEnv {
     NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY:
       process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY,
     ADMIN_EMAIL: process.env.ADMIN_EMAIL,
+    R2_ACCOUNT_ID: process.env.R2_ACCOUNT_ID,
+    R2_ACCESS_KEY_ID: process.env.R2_ACCESS_KEY_ID,
+    R2_SECRET_ACCESS_KEY: process.env.R2_SECRET_ACCESS_KEY,
+    R2_BUCKET_NAME: process.env.R2_BUCKET_NAME,
+    R2_ENDPOINT: process.env.R2_ENDPOINT,
+    R2_REGION: process.env.R2_REGION,
   });
 }
 
@@ -171,4 +201,46 @@ export function getStripeConfig(): {
 export function isStripeConfigured(): boolean {
   const { secretKey, webhookSecret } = getStripeConfig();
   return Boolean(secretKey && webhookSecret);
+}
+
+export function getR2Config(): {
+  accountId: string;
+  accessKeyId: string;
+  secretAccessKey: string;
+  bucketName: string;
+  endpoint: string;
+  region: string;
+} {
+  const env = getServerEnv();
+  const accountId = env.R2_ACCOUNT_ID;
+  const accessKeyId = env.R2_ACCESS_KEY_ID;
+  const secretAccessKey = env.R2_SECRET_ACCESS_KEY;
+  const bucketName = env.R2_BUCKET_NAME;
+  const endpoint = env.R2_ENDPOINT;
+
+  if (!accountId || !accessKeyId || !secretAccessKey || !bucketName || !endpoint) {
+    throw new Error(
+      "Configuration R2 incomplète — vérifiez les variables R2_*.",
+    );
+  }
+
+  return {
+    accountId,
+    accessKeyId,
+    secretAccessKey,
+    bucketName,
+    endpoint,
+    region: env.R2_REGION ?? "auto",
+  };
+}
+
+export function isR2Configured(): boolean {
+  const env = getServerEnv();
+  return Boolean(
+    env.R2_ACCOUNT_ID &&
+      env.R2_ACCESS_KEY_ID &&
+      env.R2_SECRET_ACCESS_KEY &&
+      env.R2_BUCKET_NAME &&
+      env.R2_ENDPOINT,
+  );
 }

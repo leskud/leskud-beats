@@ -3,6 +3,11 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  uploadBeatFilesFromBrowser,
+  type UploadProgressCallback,
+} from "@/lib/admin/client-upload";
+import type { BeatFileKind } from "@/lib/admin/beat-paths";
+import {
   analyzeAudioFile,
   buildDefaultDescription,
 } from "@/lib/audio/analyze";
@@ -13,20 +18,24 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 
-const MAX_UPLOAD_BYTES = 250 * 1024 * 1024;
-
 function HelpText({ children }: { children: React.ReactNode }) {
   return <p className="mt-1 text-xs text-muted">{children}</p>;
 }
 
-function formatFileSize(bytes: number): string {
-  return `${(bytes / (1024 * 1024)).toFixed(1)} Mo`;
+function getSelectedFile(form: HTMLFormElement, name: string): File | undefined {
+  const input = form.elements.namedItem(name);
+  if (!(input instanceof HTMLInputElement) || input.type !== "file") {
+    return undefined;
+  }
+  const file = input.files?.[0];
+  return file && file.size > 0 ? file : undefined;
 }
 
 export function BeatForm() {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
   const [title, setTitle] = useState("");
   const [bpm, setBpm] = useState("");
@@ -53,6 +62,10 @@ export function BeatForm() {
     );
   }, [title, bpm, musicalKey, displayGenre]);
 
+  const onUploadProgress: UploadProgressCallback = (message) => {
+    setStatusMessage(message);
+  };
+
   async function handleAudioAnalysis(file: File) {
     setAnalysisNote("Analyse du fichier audio...");
     try {
@@ -78,53 +91,126 @@ export function BeatForm() {
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
+    setStatusMessage(null);
     setIsSubmitting(true);
 
     const form = event.currentTarget;
-    const formData = new FormData(form);
+    const cover = getSelectedFile(form, "cover");
+    const mp3 = getSelectedFile(form, "mp3");
+    const wav = getSelectedFile(form, "wav");
+    const stems = getSelectedFile(form, "stemsZip");
+    const status = String(new FormData(form).get("status") ?? "draft");
 
-    let totalSize = 0;
-    for (const [, value] of formData.entries()) {
-      if (value instanceof File && value.size > 0) {
-        totalSize += value.size;
-      }
+    if (!cover) {
+      setError("La cover est requise.");
+      setIsSubmitting(false);
+      return;
     }
 
-    if (totalSize > MAX_UPLOAD_BYTES) {
+    if (!mp3) {
       setError(
-        `Fichiers trop volumineux (${formatFileSize(totalSize)}). Maximum : 250 Mo au total.`,
+        "Le MP3 est requis. La preview filigranée sera générée automatiquement.",
       );
       setIsSubmitting(false);
       return;
     }
 
+    if (status === "published" && !wav) {
+      setError(
+        "MP3 et WAV requis pour publier. Enregistrez en brouillon sinon.",
+      );
+      setIsSubmitting(false);
+      return;
+    }
+
+    const metadataForm = new FormData();
+    for (const [key, value] of new FormData(form).entries()) {
+      if (value instanceof File) continue;
+      metadataForm.set(key, value);
+    }
+
     try {
-      const response = await fetch("/api/admin/beats", {
+      setStatusMessage("Création du beat…");
+
+      const createResponse = await fetch("/api/admin/beats", {
         method: "POST",
-        body: formData,
+        body: metadataForm,
       });
 
-      const data = (await response.json().catch(() => null)) as {
+      const createData = (await createResponse.json().catch(() => null)) as {
         error?: string;
-        success?: boolean;
+        beatId?: string;
       } | null;
 
-      if (!response.ok || data?.error) {
-        setError(
-          data?.error ??
-            (response.status === 413
-              ? "Fichiers trop volumineux (max 250 Mo)."
-              : "Erreur lors de la publication."),
-        );
+      if (!createResponse.ok || !createData?.beatId) {
+        setError(createData?.error ?? "Impossible de créer le beat.");
+        return;
+      }
+
+      const beatId = createData.beatId;
+      const filesToUpload: Partial<Record<BeatFileKind, File>> = {
+        cover,
+        mp3,
+      };
+      if (wav) filesToUpload.wav = wav;
+      if (stems) filesToUpload.stems = stems;
+
+      setStatusMessage("Upload des fichiers (R2 / Supabase)…");
+
+      const uploadedPaths = await uploadBeatFilesFromBrowser(
+        beatId,
+        filesToUpload,
+        onUploadProgress,
+      );
+
+      const finalizeForm = new FormData();
+      for (const [key, value] of metadataForm.entries()) {
+        finalizeForm.set(key, value);
+      }
+
+      if (uploadedPaths.cover) {
+        finalizeForm.set("uploadedCoverPath", uploadedPaths.cover);
+      }
+      if (uploadedPaths.mp3) {
+        finalizeForm.set("uploadedMp3Path", uploadedPaths.mp3);
+      }
+      if (uploadedPaths.wav) {
+        finalizeForm.set("uploadedWavPath", uploadedPaths.wav);
+      }
+      if (uploadedPaths.stems) {
+        finalizeForm.set("uploadedStemsPath", uploadedPaths.stems);
+      }
+
+      setStatusMessage("Finalisation…");
+
+      const finalizeResponse = await fetch(`/api/admin/beats/${beatId}`, {
+        method: "PATCH",
+        body: finalizeForm,
+      });
+
+      const finalizeData = (await finalizeResponse.json().catch(() => null)) as {
+        error?: string;
+        previewWarning?: string | null;
+      } | null;
+
+      if (!finalizeResponse.ok || finalizeData?.error) {
+        setError(finalizeData?.error ?? "Finalisation échouée.");
+        return;
+      }
+
+      if (finalizeData?.previewWarning) {
+        setStatusMessage(finalizeData.previewWarning);
         return;
       }
 
       router.push("/admin");
       router.refresh();
-    } catch {
-      setError(
-        "Échec de l'envoi des fichiers. Vérifiez leur taille ou réessayez.",
-      );
+    } catch (submitError) {
+      const message =
+        submitError instanceof Error
+          ? submitError.message
+          : "Erreur réseau lors de la création.";
+      setError(message);
     } finally {
       setIsSubmitting(false);
     }
@@ -139,6 +225,12 @@ export function BeatForm() {
       {error && (
         <div className="rounded-lg border border-red-200/20 bg-red-500/10 px-4 py-3 text-sm text-red-300">
           {error}
+        </div>
+      )}
+
+      {statusMessage && (
+        <div className="rounded-lg border border-gold/20 bg-gold/10 px-4 py-3 text-sm text-gold">
+          {statusMessage}
         </div>
       )}
 
@@ -351,9 +443,9 @@ export function BeatForm() {
       <section className="space-y-4">
         <h2 className="text-lg font-medium">Fichiers</h2>
         <div className="rounded-lg border border-gold/20 bg-gold/10 px-4 py-3 text-sm text-gold">
-          La preview filigranée est générée automatiquement depuis le MP3 avec
-          votre tag vocal (toutes les 20 secondes). Plus besoin d&apos;uploader
-          un MP3 séparé.
+          Cover → Supabase. MP3, WAV et Stems → Cloudflare R2 (upload direct,
+          sans limite Vercel). La preview filigranée est générée côté serveur
+          depuis le MP3 ; si elle échoue, le fichier payant reste enregistré.
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
@@ -407,7 +499,10 @@ export function BeatForm() {
               type="file"
               accept=".zip,.rar"
             />
-            <HelpText>ZIP recommandé. Un seul fichier pour Stems et Exclusive.</HelpText>
+            <HelpText>
+              ZIP recommandé. Un seul fichier pour Stems et Exclusive — gros
+              fichiers supportés via R2.
+            </HelpText>
           </div>
         </div>
       </section>
