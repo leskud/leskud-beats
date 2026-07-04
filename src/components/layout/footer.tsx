@@ -1,14 +1,14 @@
 import Link from "next/link";
 import { LeskudLogo } from "@/components/brand/leskud-logo";
 import { YoutubeLink } from "@/components/brand/youtube-link";
-import { SITE_NAME, YOUTUBE_CHANNEL_URL } from "@/lib/constants";
+import { CONTACT_EMAIL, SITE_NAME, YOUTUBE_CHANNEL_URL } from "@/lib/constants";
 
 const footerLinks = [
-  { href: "/legal/mentions", label: "Mentions légales" },
+  { href: "/legal/mentions-legales", label: "Mentions légales" },
   { href: "/legal/cgv", label: "CGV" },
   { href: "/legal/licences", label: "Licences" },
   { href: "/legal/confidentialite", label: "Confidentialité" },
-  { href: "mailto:contact@leskud.beats", label: "Contact" },
+  { href: "/contact", label: "Contact" },
 ];
 
 export function Footer() {
@@ -34,7 +34,16 @@ export function Footer() {
           </nav>
         </div>
 
-        <p className="mt-8 text-center text-xs text-muted sm:text-left">
+        <p className="mt-4 text-xs text-muted">
+          <a
+            href={`mailto:${CONTACT_EMAIL}`}
+            className="transition-colors hover:text-gold"
+          >
+            {CONTACT_EMAIL}
+          </a>
+        </p>
+
+        <p className="mt-4 text-center text-xs text-muted sm:text-left">
           © {new Date().getFullYear()} {SITE_NAME}
         </p>
       </div>

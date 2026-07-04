@@ -17,7 +17,17 @@ export async function POST(request: Request) {
 
     if (body.acceptedTerms !== true) {
       return NextResponse.json(
-        { error: "Tu dois accepter les CGV et les conditions de licence." },
+        { error: "Tu dois accepter les CGV et la licence associée." },
+        { status: 400 },
+      );
+    }
+
+    if (body.acceptedImmediateAccess !== true) {
+      return NextResponse.json(
+        {
+          error:
+            "Tu dois accepter l'accès immédiat aux fichiers numériques.",
+        },
         { status: 400 },
       );
     }
@@ -26,6 +36,7 @@ export async function POST(request: Request) {
       beatLicenseId: String(body.beatLicenseId ?? ""),
       email: body.email ? String(body.email) : undefined,
       acceptedTerms: true,
+      acceptedImmediateAccess: true,
       termsVersion: String(body.termsVersion ?? ""),
       licenseVersion: String(body.licenseVersion ?? ""),
       buyerIp: getClientIp(request),

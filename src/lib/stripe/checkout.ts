@@ -3,10 +3,6 @@ import { z } from "zod";
 import { getAppUrl } from "@/lib/config/env";
 import { LICENSE_LABELS } from "@/lib/constants";
 import { getLicenseAvailability } from "@/lib/beats/licenses";
-import {
-  EXCLUSIVE_SOLD_MESSAGE,
-  getExclusivePurchaseBlockState,
-} from "@/lib/beats/exclusive-guard";
 import { LICENSE_VERSION, TERMS_VERSION } from "@/lib/legal/versions";
 import { createClient } from "@/lib/supabase/server";
 import { getCheckoutProductName } from "@/lib/stripe/fulfill-order";
@@ -17,7 +13,10 @@ const checkoutInputSchema = z.object({
   beatLicenseId: z.string().uuid(),
   email: z.string().email().optional(),
   acceptedTerms: z.literal(true, {
-    message: "Tu dois accepter les CGV et les conditions de licence.",
+    message: "Tu dois accepter les CGV et la licence associée.",
+  }),
+  acceptedImmediateAccess: z.literal(true, {
+    message: "Tu dois accepter l'accès immédiat aux fichiers numériques.",
   }),
   termsVersion: z.string(),
   licenseVersion: z.string(),
@@ -99,13 +98,12 @@ export async function createLicenseCheckout(
 
   const licenseType = license.license_type as LicenseType;
 
-  const exclusiveBlockState =
-    licenseType === "exclusive"
-      ? await getExclusivePurchaseBlockState(beat.id, beat.status)
-      : { blocked: false, exclusiveAlreadySold: false };
-
-  if (licenseType === "exclusive" && exclusiveBlockState.blocked) {
-    return { success: false, error: EXCLUSIVE_SOLD_MESSAGE };
+  if (licenseType === "exclusive") {
+    return {
+      success: false,
+      error:
+        "L'Exclusive est sur demande. Contactez leskud.contact@gmail.com pour en discuter.",
+    };
   }
 
   const { data: beatLicenses } = await supabase
@@ -118,14 +116,11 @@ export async function createLicenseCheckout(
     licenseType,
     {
       beatStatus: beat.status as "draft" | "published" | "sold_exclusive",
-      exclusiveAlreadySold: exclusiveBlockState.exclusiveAlreadySold,
+      exclusiveAlreadySold: false,
     },
   );
 
   if (!availability.available || availability.licenseId !== license.id) {
-    if (licenseType === "exclusive" && exclusiveBlockState.blocked) {
-      return { success: false, error: EXCLUSIVE_SOLD_MESSAGE };
-    }
     return { success: false, error: "Cette licence n'est plus disponible." };
   }
 
@@ -157,7 +152,8 @@ export async function createLicenseCheckout(
       customer_email: customerEmail,
       terms_version: parsed.data.termsVersion,
       license_version: parsed.data.licenseVersion,
-      accepted_at: acceptedAt,
+      accepted_terms_at: acceptedAt,
+      accepted_immediate_access_at: acceptedAt,
       buyer_ip: input.buyerIp ?? "",
       buyer_user_agent: input.buyerUserAgent ?? "",
     },

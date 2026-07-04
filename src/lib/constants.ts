@@ -7,6 +7,8 @@ export const LOGO_PATH = "/logo/leskud.png";
 export const YOUTUBE_CHANNEL_URL =
   "https://www.youtube.com/channel/UCUu1QVnQLDuhPoUJJoU06qg";
 export const RESEND_TEST_RECIPIENT = "leskud.contact@gmail.com";
+export const CONTACT_EMAIL = "leskud.contact@gmail.com";
+export const PRODUCER_NAME = "LeSkud Beats";
 
 export const LICENSE_TYPES = [
   "mp3",
@@ -16,6 +18,16 @@ export const LICENSE_TYPES = [
   "exclusive",
 ] as const;
 export type LicenseType = (typeof LICENSE_TYPES)[number];
+
+/** Licences vendues en checkout Stripe public */
+export const PUBLIC_CHECKOUT_LICENSE_TYPES = [
+  "mp3",
+  "wav",
+  "stems",
+  "unlimited",
+] as const;
+export type PublicCheckoutLicenseType =
+  (typeof PUBLIC_CHECKOUT_LICENSE_TYPES)[number];
 
 /** Ordre d'affichage grille commerciale */
 export const LICENSE_DISPLAY_ORDER: LicenseType[] = [
@@ -27,10 +39,10 @@ export const LICENSE_DISPLAY_ORDER: LicenseType[] = [
 ];
 
 export const DEFAULT_LICENSE_PRICES: Record<LicenseType, number> = {
-  mp3: 2900,
-  wav: 4900,
-  stems: 9900,
-  unlimited: 14900,
+  mp3: 2999,
+  wav: 4999,
+  stems: 7999,
+  unlimited: 12999,
   exclusive: 29900,
 };
 
@@ -42,8 +54,11 @@ export const LICENSE_LABELS: Record<LicenseType, string> = {
   exclusive: "Exclusive",
 };
 
+export const EXCLUSIVE_ON_REQUEST_LABEL = "Sur demande";
+export const EXCLUSIVE_PRICE_HINT = "À partir de 299 €";
+
 export const MAX_DOWNLOADS_PER_PURCHASE = 5;
-export const SIGNED_URL_EXPIRY_SECONDS = 3600; // 1 heure
+export const SIGNED_URL_EXPIRY_SECONDS = 3600;
 
 export const STORAGE_BUCKETS = {
   previews: "previews",

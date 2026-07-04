@@ -1,12 +1,17 @@
-import { notFound } from "next/navigation";
-import { CgvContent, LicencesContent } from "@/components/legal/legal-content";
-import { PlaceholderPage } from "@/components/ui/placeholder-page";
+import { notFound, redirect } from "next/navigation";
+import {
+  CgvContent,
+  ConfidentialiteContent,
+  LicencesContent,
+  MentionsLegalesContent,
+} from "@/components/legal/legal-content";
 
 type Props = { params: Promise<{ slug: string }> };
 
 const METADATA: Record<string, string> = {
+  "mentions-legales": "Mentions légales",
   mentions: "Mentions légales",
-  cgv: "Conditions générales de vente",
+  cgv: "Conditions Générales de Vente",
   licences: "Licences",
   confidentialite: "Politique de confidentialité",
 };
@@ -19,6 +24,10 @@ export async function generateMetadata({ params }: Props) {
 export default async function LegalPage({ params }: Props) {
   const { slug } = await params;
 
+  if (slug === "mentions") {
+    redirect("/legal/mentions-legales");
+  }
+
   if (slug === "cgv") {
     return <CgvContent />;
   }
@@ -27,13 +36,12 @@ export default async function LegalPage({ params }: Props) {
     return <LicencesContent />;
   }
 
-  if (slug === "mentions" || slug === "confidentialite") {
-    return (
-      <PlaceholderPage
-        title={METADATA[slug] ?? "Page légale"}
-        description="Contenu juridique à compléter — placeholder propre pour la v1."
-      />
-    );
+  if (slug === "mentions-legales") {
+    return <MentionsLegalesContent />;
+  }
+
+  if (slug === "confidentialite") {
+    return <ConfidentialiteContent />;
   }
 
   notFound();

@@ -140,10 +140,19 @@ export async function fulfillCheckoutSession(
 
   const totalCents = session.amount_total ?? license.price_cents;
 
-  const acceptedAtRaw = session.metadata?.accepted_at;
-  const acceptedAt = acceptedAtRaw
-    ? new Date(acceptedAtRaw).toISOString()
-    : null;
+  const acceptedTermsAtRaw = session.metadata?.accepted_terms_at;
+  const acceptedImmediateAtRaw =
+    session.metadata?.accepted_immediate_access_at;
+  const acceptedAtLegacy = session.metadata?.accepted_at;
+
+  const acceptedTermsAt = acceptedTermsAtRaw
+    ? new Date(acceptedTermsAtRaw).toISOString()
+    : acceptedAtLegacy
+      ? new Date(acceptedAtLegacy).toISOString()
+      : null;
+  const acceptedLicenseAt = acceptedImmediateAtRaw
+    ? new Date(acceptedImmediateAtRaw).toISOString()
+    : acceptedTermsAt;
   const termsVersion = session.metadata?.terms_version?.trim() || null;
   const licenseVersion = session.metadata?.license_version?.trim() || null;
   const buyerIp = session.metadata?.buyer_ip?.trim() || null;
@@ -163,8 +172,8 @@ export async function fulfillCheckoutSession(
       total_cents: totalCents,
       currency: session.currency ?? "eur",
       paid_at: new Date().toISOString(),
-      accepted_terms_at: acceptedAt,
-      accepted_license_at: acceptedAt,
+      accepted_terms_at: acceptedTermsAt,
+      accepted_license_at: acceptedLicenseAt,
       terms_version: termsVersion,
       license_version: licenseVersion,
       buyer_ip: buyerIp || null,

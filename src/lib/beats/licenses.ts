@@ -3,38 +3,46 @@ import { formatPrice } from "@/lib/utils";
 import type { BeatLicense } from "@/types/database";
 import type { BeatStatus } from "@/types";
 
+export type LicenseUnavailableReason =
+  | "exclusive_sold"
+  | "exclusive_on_request"
+  | "stems_unavailable"
+  | "files_missing";
+
 export type LicenseAvailability = {
   type: LicenseType;
   available: boolean;
   priceCents: number | null;
   licenseId: string | null;
-  unavailableReason?: "exclusive_sold";
+  unavailableReason?: LicenseUnavailableReason;
+  unavailableLabel?: string;
 };
 
 export type LicenseAvailabilityContext = {
   beatStatus?: BeatStatus;
   exclusiveAlreadySold?: boolean;
+  beatTitle?: string;
 };
 
 function licenseHasFile(license: BeatLicense): boolean {
   return Boolean(license.storage_path?.trim());
 }
 
-function canOfferUnlimited(licenses: BeatLicense[]): boolean {
+function hasStemsFile(licenses: BeatLicense[]): boolean {
   const stems = licenses.find((l) => l.license_type === "stems");
-  const unlimited = licenses.find((l) => l.license_type === "unlimited");
-  return (
-    Boolean(stems?.is_available && licenseHasFile(stems)) &&
-    Boolean(unlimited?.is_available)
-  );
+  return Boolean(stems?.storage_path?.trim());
 }
 
-function canOfferExclusive(licenses: BeatLicense[]): boolean {
-  const mp3 = licenses.find((l) => l.license_type === "mp3");
-  const wav = licenses.find((l) => l.license_type === "wav");
+function canOfferStemsLicense(licenses: BeatLicense[]): boolean {
+  const stems = licenses.find((l) => l.license_type === "stems");
+  return Boolean(stems?.is_available && licenseHasFile(stems));
+}
+
+function canOfferUnlimited(licenses: BeatLicense[]): boolean {
+  const unlimited = licenses.find((l) => l.license_type === "unlimited");
   return (
-    Boolean(mp3?.is_available && licenseHasFile(mp3)) &&
-    Boolean(wav?.is_available && licenseHasFile(wav))
+    hasStemsFile(licenses) &&
+    Boolean(unlimited?.is_available)
   );
 }
 
@@ -48,28 +56,65 @@ export function getLicenseAvailability(
     return { type, available: false, priceCents: null, licenseId: null };
   }
 
-  if (type === "unlimited") {
-    const unlimited = licenses.find((l) => l.license_type === "unlimited");
-    const available = canOfferUnlimited(licenses);
+  if (type === "exclusive") {
+    if (context?.beatStatus === "sold_exclusive" || context?.exclusiveAlreadySold) {
+      return {
+        type,
+        available: false,
+        priceCents: null,
+        licenseId: null,
+        unavailableReason: "exclusive_sold",
+        unavailableLabel: "Exclusive déjà vendue.",
+      };
+    }
+
     return {
       type,
-      available,
-      priceCents: available ? (unlimited?.price_cents ?? null) : null,
-      licenseId: available ? (unlimited?.id ?? null) : null,
+      available: false,
+      priceCents: null,
+      licenseId: null,
+      unavailableReason: "exclusive_on_request",
+      unavailableLabel: "Sur demande",
     };
   }
 
-  if (type === "exclusive") {
-    const exclusiveBlocked =
-      context?.beatStatus === "sold_exclusive" ||
-      context?.exclusiveAlreadySold === true;
-    const available = !exclusiveBlocked && canOfferExclusive(licenses);
+  if (type === "stems") {
+    if (!hasStemsFile(licenses)) {
+      return {
+        type,
+        available: false,
+        priceCents: license.price_cents,
+        licenseId: null,
+        unavailableReason: "stems_unavailable",
+        unavailableLabel: "Stems indisponibles pour cette prod",
+      };
+    }
+    const available = canOfferStemsLicense(licenses);
+    return {
+      type,
+      available,
+      priceCents: license.price_cents,
+      licenseId: available ? license.id : null,
+    };
+  }
+
+  if (type === "unlimited") {
+    if (!hasStemsFile(licenses)) {
+      return {
+        type,
+        available: false,
+        priceCents: license.price_cents,
+        licenseId: null,
+        unavailableReason: "stems_unavailable",
+        unavailableLabel: "Stems indisponibles pour cette prod",
+      };
+    }
+    const available = canOfferUnlimited(licenses);
     return {
       type,
       available,
       priceCents: available ? license.price_cents : null,
       licenseId: available ? license.id : null,
-      unavailableReason: exclusiveBlocked ? "exclusive_sold" : undefined,
     };
   }
 
@@ -80,6 +125,7 @@ export function getLicenseAvailability(
     available,
     priceCents: hasFile ? license.price_cents : null,
     licenseId: available ? license.id : null,
+    unavailableReason: !hasFile ? "files_missing" : undefined,
   };
 }
 

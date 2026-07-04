@@ -102,6 +102,7 @@ export default async function BeatDetailPage({ params }: Props) {
           userEmail={user?.email}
           beatStatus={beat.status}
           exclusiveAlreadySold={exclusiveAlreadySold}
+          beatTitle={beat.title}
         />
       </div>
     </div>
