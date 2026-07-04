@@ -31,7 +31,7 @@ export function formatKeyForDownloadFilename(musicalKey: string): string {
     .replace(/#/g, "SHARP")
     .toUpperCase();
 
-  if (!cleaned) return "UNKNOWN";
+  if (!cleaned) return "";
   return cleaned;
 }
 
@@ -48,26 +48,40 @@ export function extensionForDownloadFile(
   return "mp3";
 }
 
+/**
+ * Nom client payant — uniquement depuis les métadonnées beat en base.
+ * Jamais depuis le nom du fichier uploadé ou le storage path.
+ */
 export function buildPaidDownloadFilename(params: {
-  genre: string;
+  genre?: string | null;
   title: string;
-  bpm: number;
-  musicalKey: string;
+  bpm?: number | null;
+  musicalKey?: string | null;
   licenseType: LicenseType;
   fileType: DownloadFileType;
   storagePath: string;
 }): string {
-  const genre = sanitizePaidFilenamePart(params.genre, 24);
+  const genre = sanitizePaidFilenamePart(params.genre ?? "", 24);
   const title = sanitizePaidFilenamePart(params.title, 48);
-  const bpm = Math.round(params.bpm);
-  const key = formatKeyForDownloadFilename(params.musicalKey);
   const licenseLabel = LICENSE_FILENAME_LABELS[params.licenseType] ?? "LICENSE";
   const extension = extensionForDownloadFile(params.fileType, params.storagePath);
 
-  return `${genre}_${title}_LESKUD_${bpm}BPM_${key}_${licenseLabel}.${extension}`;
+  const segments: string[] = [genre, title, "LESKUD"];
+
+  const bpm = params.bpm != null && params.bpm > 0 ? Math.round(params.bpm) : null;
+  if (bpm) segments.push(`${bpm}BPM`);
+
+  const key = params.musicalKey?.trim()
+    ? formatKeyForDownloadFilename(params.musicalKey)
+    : "";
+  if (key) segments.push(key);
+
+  segments.push(licenseLabel);
+
+  return `${segments.join("_")}.${extension}`;
 }
 
-/** Preview gratuite : TITRE_LESKUD_PREVIEW.mp3 */
+/** Preview gratuite : TITRE_LESKUD_PREVIEW.mp3 (depuis beat.title uniquement) */
 export function buildPreviewDownloadFilename(title: string): string {
   const slug = sanitizePaidFilenamePart(title, 64);
   return `${slug}_LESKUD_PREVIEW.mp3`;

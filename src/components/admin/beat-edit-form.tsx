@@ -3,14 +3,20 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import {
+  analyzeStoredBeatAudio,
+  applyBeatAudioAnalysis,
+} from "@/lib/admin/actions";
+import {
   uploadBeatFilesFromBrowser,
   type UploadProgressCallback,
 } from "@/lib/admin/client-upload";
 import type { BeatFileKind } from "@/lib/admin/beat-paths";
 import {
   analyzeAudioFile,
+  applyAnalysisFillEmptyOnly,
   formatClientAnalysisMessage,
 } from "@/lib/audio/analyze";
+import type { ReanalysisPreview } from "@/lib/audio/analyze-shared";
 import { GENRES, MOODS, MUSICAL_KEYS } from "@/lib/constants";
 import type { BeatWithLicenses } from "@/types/database";
 import { Button } from "@/components/ui/button";
@@ -42,6 +48,11 @@ export function BeatEditForm({ beat }: BeatEditFormProps) {
     String(beat.duration_seconds),
   );
   const [musicalKey, setMusicalKey] = useState(beat.musical_key);
+  const [reanalysis, setReanalysis] = useState<
+    (ReanalysisPreview & { sourceType?: string }) | null
+  >(null);
+  const [isReanalyzing, setIsReanalyzing] = useState(false);
+  const [isApplyingReanalysis, setIsApplyingReanalysis] = useState(false);
 
   const isKnownGenre = GENRES.includes(
     beat.genre as (typeof GENRES)[number],
@@ -60,15 +71,99 @@ export function BeatEditForm({ beat }: BeatEditFormProps) {
   async function handleAudioAnalysis(file: File) {
     setAnalysisNote("Analyse du fichier audio…");
     try {
-      const analysis = await analyzeAudioFile(file);
-      if (analysis.duration) setDurationSeconds(String(analysis.duration));
-      if (analysis.bpm) setBpm(String(analysis.bpm));
-      if (analysis.musicalKey) setMusicalKey(analysis.musicalKey);
-      setAnalysisNote(formatClientAnalysisMessage(analysis));
+      const analysis = await analyzeAudioFile(file, { useFilenameHints: true });
+      const applied = applyAnalysisFillEmptyOnly(
+        { bpm, musicalKey, duration: durationSeconds },
+        {
+          bpm: analysis.bpm,
+          musicalKey: analysis.musicalKey,
+          duration: analysis.duration,
+        },
+      );
+
+      let preserved = false;
+      if (applied.duration) {
+        setDurationSeconds(String(applied.duration));
+      } else if (analysis.duration) {
+        preserved = true;
+      }
+      if (applied.bpm) {
+        setBpm(String(applied.bpm));
+      } else if (analysis.bpm) {
+        preserved = true;
+      }
+      if (applied.musicalKey) {
+        setMusicalKey(applied.musicalKey);
+      } else if (analysis.musicalKey) {
+        preserved = true;
+      }
+
+      setAnalysisNote(
+        formatClientAnalysisMessage(analysis, { preservedExisting: preserved }),
+      );
     } catch {
       setAnalysisNote(
         "BPM/clé/durée non détectés automatiquement — complétez manuellement.",
       );
+    }
+  }
+
+  async function handleReanalyzeStoredAudio() {
+    setError(null);
+    setIsReanalyzing(true);
+    setReanalysis(null);
+
+    try {
+      const result = await analyzeStoredBeatAudio(beat.id);
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      setReanalysis(result as ReanalysisPreview & { sourceType?: string });
+    } catch {
+      setError("Impossible d'analyser le fichier audio.");
+    } finally {
+      setIsReanalyzing(false);
+    }
+  }
+
+  async function handleApplyReanalysis() {
+    if (!reanalysis) return;
+
+    setIsApplyingReanalysis(true);
+    setError(null);
+
+    try {
+      const result = await applyBeatAudioAnalysis(beat.id, {
+        bpm: reanalysis.bpmDetected ? reanalysis.bpm : null,
+        musicalKey: reanalysis.keyDetected ? reanalysis.musicalKey : null,
+        durationSeconds: reanalysis.durationDetected
+          ? reanalysis.duration
+          : null,
+      });
+
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+
+      if (reanalysis.bpmDetected && reanalysis.bpm) {
+        setBpm(String(reanalysis.bpm));
+      }
+      if (reanalysis.keyDetected && reanalysis.musicalKey) {
+        setMusicalKey(reanalysis.musicalKey);
+      }
+      if (reanalysis.durationDetected && reanalysis.duration) {
+        setDurationSeconds(String(reanalysis.duration));
+      }
+
+      setReanalysis(null);
+      setAnalysisNote("Métadonnées audio mises à jour.");
+      router.refresh();
+    } catch {
+      setError("Impossible d'appliquer les valeurs détectées.");
+    } finally {
+      setIsApplyingReanalysis(false);
     }
   }
 
@@ -202,6 +297,72 @@ export function BeatEditForm({ beat }: BeatEditFormProps) {
           {analysisNote}
         </div>
       )}
+
+      <section id="reanalyze" className="space-y-4 rounded-xl border border-border bg-surface/50 p-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-medium">Métadonnées audio</h2>
+            <p className="mt-1 text-sm text-muted">
+              Ré-analyse le MP3, WAV ou preview existant pour corriger BPM, clé
+              ou durée. Les valeurs actuelles ne sont pas écrasées sans
+              confirmation.
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={isReanalyzing || isSubmitting}
+            onClick={handleReanalyzeStoredAudio}
+          >
+            {isReanalyzing ? "Analyse en cours…" : "Ré-analyser l'audio"}
+          </Button>
+        </div>
+
+        {reanalysis && (
+          <div className="space-y-3 rounded-lg border border-gold/20 bg-gold/10 px-4 py-3 text-sm">
+            <p className="font-medium text-gold">{reanalysis.summary}</p>
+            {reanalysis.sourceType && (
+              <p className="text-muted">
+                Source :{" "}
+                {reanalysis.sourceType === "mp3"
+                  ? "MP3"
+                  : reanalysis.sourceType === "wav"
+                    ? "WAV"
+                    : "Preview"}
+              </p>
+            )}
+            {reanalysis.detailLines.length > 0 && (
+              <ul className="list-inside list-disc text-muted">
+                {reanalysis.detailLines.map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
+            )}
+            <div className="flex flex-wrap gap-2 pt-1">
+              <Button
+                type="button"
+                disabled={
+                  isApplyingReanalysis ||
+                  (!reanalysis.bpmDetected &&
+                    !reanalysis.keyDetected &&
+                    !reanalysis.durationDetected)
+                }
+                onClick={handleApplyReanalysis}
+              >
+                {isApplyingReanalysis ? "Application…" : "Appliquer ces valeurs"}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                disabled={isApplyingReanalysis}
+                onClick={() => setReanalysis(null)}
+              >
+                Annuler
+              </Button>
+            </div>
+          </div>
+        )}
+      </section>
 
       <section className="space-y-4">
         <h2 className="text-lg font-medium">Informations</h2>

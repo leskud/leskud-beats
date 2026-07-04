@@ -22,6 +22,7 @@ import { analyzeAudioBuffer } from "@/lib/audio/analyze-server";
 import {
   AUDIO_ANALYSIS_FAILED_MESSAGE,
   formatAnalysisSuccessMessage,
+  formatReanalysisPreview,
   hasAnalysisValues,
 } from "@/lib/audio/analyze-shared";
 import {
@@ -88,7 +89,9 @@ async function analyzeUploadedBeatAudio(
 
   try {
     const buffer = await downloadR2ObjectBuffer(audioPath);
-    const analysis = await analyzeAudioBuffer(buffer, audioPath);
+    const analysis = await analyzeAudioBuffer(buffer, {
+      mimeType: uploadedMp3Path ? "audio/mpeg" : "audio/wav",
+    });
 
     const message = hasAnalysisValues(analysis)
       ? formatAnalysisSuccessMessage(analysis)
@@ -105,6 +108,167 @@ async function analyzeUploadedBeatAudio(
       audio_path: audioPath,
     });
     return { message: AUDIO_ANALYSIS_FAILED_MESSAGE };
+  }
+}
+
+type StoredAudioSource = {
+  path: string;
+  bucket: string;
+  provider: StorageProvider;
+  sourceType: "mp3" | "wav" | "preview";
+};
+
+function resolveStoredAudioSource(
+  beat: {
+    preview_path: string | null;
+    beat_licenses?: Array<{
+      license_type: string;
+      storage_path: string | null;
+      storage_provider?: string | null;
+    }>;
+  },
+): StoredAudioSource | null {
+  const mp3License = beat.beat_licenses?.find(
+    (l) => l.license_type === "mp3" && l.storage_path?.trim(),
+  );
+  const wavLicense = beat.beat_licenses?.find(
+    (l) => l.license_type === "wav" && l.storage_path?.trim(),
+  );
+
+  if (mp3License?.storage_path) {
+    return {
+      path: mp3License.storage_path,
+      bucket: STORAGE_BUCKETS.beats,
+      provider: normalizeStorageProvider(mp3License.storage_provider),
+      sourceType: "mp3",
+    };
+  }
+
+  if (wavLicense?.storage_path) {
+    return {
+      path: wavLicense.storage_path,
+      bucket: STORAGE_BUCKETS.beats,
+      provider: normalizeStorageProvider(wavLicense.storage_provider),
+      sourceType: "wav",
+    };
+  }
+
+  if (beat.preview_path?.trim()) {
+    return {
+      path: beat.preview_path,
+      bucket: STORAGE_BUCKETS.previews,
+      provider: "supabase",
+      sourceType: "preview",
+    };
+  }
+
+  return null;
+}
+
+async function downloadStoredAudioBuffer(
+  supabase: AdminSupabase,
+  source: StoredAudioSource,
+): Promise<Buffer> {
+  if (source.provider === "r2") {
+    return downloadR2ObjectBuffer(source.path);
+  }
+  return downloadBeatBuffer(supabase, source.bucket, source.path);
+}
+
+export async function analyzeStoredBeatAudio(beatId: string) {
+  try {
+    const { supabase } = await requireAdmin();
+
+    const { data: beat } = await supabase
+      .from("beats")
+      .select("*, beat_licenses(*)")
+      .eq("id", beatId)
+      .single();
+
+    if (!beat) return { error: "Beat introuvable." };
+
+    const source = resolveStoredAudioSource(beat);
+    if (!source) {
+      return { error: "Aucun fichier audio accessible pour l'analyse." };
+    }
+
+    const buffer = await downloadStoredAudioBuffer(supabase, source);
+    const analysis = await analyzeAudioBuffer(buffer, {
+      mimeType: source.sourceType === "wav" ? "audio/wav" : "audio/mpeg",
+    });
+    const preview = formatReanalysisPreview(analysis);
+
+    return {
+      success: true,
+      ...preview,
+      sourceType: source.sourceType,
+      sources: analysis.sources,
+      current: {
+        bpm: beat.bpm,
+        musicalKey: beat.musical_key,
+        durationSeconds: beat.duration_seconds,
+      },
+    };
+  } catch (error) {
+    previewLogError("stored_audio_analysis_failed", error, { beat_id: beatId });
+    return { error: "Impossible d'analyser le fichier audio." };
+  }
+}
+
+export async function applyBeatAudioAnalysis(
+  beatId: string,
+  fields: {
+    bpm?: number | null;
+    musicalKey?: string | null;
+    durationSeconds?: number | null;
+  },
+) {
+  try {
+    const { supabase } = await requireAdmin();
+
+    const patch: Record<string, number | string> = {};
+
+    if (
+      fields.bpm != null &&
+      Number.isFinite(fields.bpm) &&
+      fields.bpm >= 1 &&
+      fields.bpm <= 300
+    ) {
+      patch.bpm = Math.round(fields.bpm);
+    }
+
+    if (fields.musicalKey?.trim()) {
+      patch.musical_key = fields.musicalKey.trim();
+    }
+
+    if (
+      fields.durationSeconds != null &&
+      Number.isFinite(fields.durationSeconds) &&
+      fields.durationSeconds >= 1
+    ) {
+      patch.duration_seconds = Math.round(fields.durationSeconds);
+    }
+
+    if (Object.keys(patch).length === 0) {
+      return { error: "Aucune valeur à appliquer." };
+    }
+
+    const { error } = await supabase
+      .from("beats")
+      .update(patch)
+      .eq("id", beatId);
+
+    if (error) return { error: error.message };
+
+    revalidatePath("/");
+    revalidatePath("/admin");
+    revalidatePath("/beats");
+
+    return { success: true };
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Mise à jour échouée.";
+    return { error: message };
   }
 }
 
@@ -447,15 +611,35 @@ export async function updateBeat(beatId: string, formData: FormData) {
     !uploadedCoverPath &&
     !coverFile;
 
+  const mp3License = existing.beat_licenses?.find(
+    (l: { license_type: string }) => l.license_type === "mp3",
+  );
+  const wavLicense = existing.beat_licenses?.find(
+    (l: { license_type: string }) => l.license_type === "wav",
+  );
+
+  const isFirstMp3Upload = Boolean(
+    uploadedMp3Path && !mp3License?.storage_path,
+  );
+  const isFirstWavUpload = Boolean(
+    uploadedWavPath && !wavLicense?.storage_path,
+  );
+  const canAutoApplyAnalysis = isFirstMp3Upload || isFirstWavUpload;
+
   if (shouldAnalyzeAudio && !stemsOnlyUpdate) {
     const analysis = await analyzeUploadedBeatAudio(
       uploadedMp3Path,
       uploadedWavPath,
     );
     analysisMessage = analysis.message;
-    if (analysis.bpm) bpm = analysis.bpm;
-    if (analysis.musicalKey) musicalKey = analysis.musicalKey;
-    if (analysis.durationSeconds) durationSeconds = analysis.durationSeconds;
+
+    if (canAutoApplyAnalysis) {
+      if (analysis.bpm) bpm = analysis.bpm;
+      if (analysis.musicalKey) musicalKey = analysis.musicalKey;
+      if (analysis.durationSeconds) durationSeconds = analysis.durationSeconds;
+    } else if (analysis.message) {
+      analysisMessage = `${analysis.message} Valeurs existantes conservées.`;
+    }
   }
 
   if (!bpm || bpm < 1 || bpm > 300) return { error: "BPM invalide." };
@@ -465,12 +649,6 @@ export async function updateBeat(beatId: string, formData: FormData) {
     return { error: "Durée invalide." };
 
   const isSoldExclusive = existing.status === "sold_exclusive";
-  const mp3License = existing.beat_licenses?.find(
-    (l: { license_type: string }) => l.license_type === "mp3",
-  );
-  const wavLicense = existing.beat_licenses?.find(
-    (l: { license_type: string }) => l.license_type === "wav",
-  );
 
   const willHaveCover = Boolean(
     uploadedCoverPath || coverFile || existing.cover_path,

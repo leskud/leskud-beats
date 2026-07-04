@@ -1,5 +1,7 @@
 import {
+  type AudioAnalysisOptions,
   type AudioAnalysisResult,
+  applyAnalysisFillEmptyOnly,
   formatAnalysisSuccessMessage,
   hasAnalysisValues,
   normalizeMusicalKey,
@@ -9,7 +11,9 @@ import {
 
 export {
   type AudioAnalysisResult,
+  applyAnalysisFillEmptyOnly,
   formatAnalysisSuccessMessage,
+  formatReanalysisPreview,
   AUDIO_ANALYSIS_FAILED_MESSAGE,
 } from "@/lib/audio/analyze-shared";
 
@@ -26,7 +30,7 @@ export function buildDefaultDescription({
 }) {
   const name = title.trim() || "Beat";
   const bpmLabel = bpm.trim() || "—";
-  const keyLabel = musicalKey.trim() || "—";
+  const keyLabel = musicalKey.trim() || "À renseigner";
   const genreLabel = genre.trim() || "—";
 
   return `${name} — production LeSkud.
@@ -103,9 +107,14 @@ async function readMetadataTags(file: File): Promise<{
 
 export type AudioAnalysis = AudioAnalysisResult;
 
-export async function analyzeAudioFile(file: File): Promise<AudioAnalysis> {
+export type AnalyzeAudioFileOptions = AudioAnalysisOptions;
+
+export async function analyzeAudioFile(
+  file: File,
+  options: AnalyzeAudioFileOptions = {},
+): Promise<AudioAnalysis> {
   const sources: string[] = [];
-  const filenameHints = parseFilenameHints(file.name);
+  const useFilenameHints = options.useFilenameHints ?? true;
 
   const [metadata, duration, detectedBpm] = await Promise.all([
     readMetadataTags(file),
@@ -123,9 +132,6 @@ export async function analyzeAudioFile(file: File): Promise<AudioAnalysis> {
   if (metadata.bpm) {
     result.bpm = metadata.bpm;
     sources.push("tags fichier");
-  } else if (filenameHints.bpm) {
-    result.bpm = filenameHints.bpm;
-    sources.push("nom du fichier");
   } else if (detectedBpm) {
     result.bpm = detectedBpm;
     sources.push("analyse audio");
@@ -134,11 +140,20 @@ export async function analyzeAudioFile(file: File): Promise<AudioAnalysis> {
   if (metadata.key) {
     result.musicalKey = metadata.key;
     sources.push("tags fichier");
-  } else if (filenameHints.key) {
-    const normalized = normalizeMusicalKey(filenameHints.key);
-    if (normalized) {
-      result.musicalKey = normalized;
-      sources.push("nom du fichier");
+  }
+
+  if (useFilenameHints) {
+    const filenameHints = parseFilenameHints(file.name);
+    if (!result.bpm && filenameHints.bpm) {
+      result.bpm = filenameHints.bpm;
+      sources.push("nom du fichier (fallback)");
+    }
+    if (!result.musicalKey && filenameHints.key) {
+      const normalized = normalizeMusicalKey(filenameHints.key);
+      if (normalized) {
+        result.musicalKey = normalized;
+        sources.push("nom du fichier (fallback)");
+      }
     }
   }
 
@@ -147,9 +162,14 @@ export async function analyzeAudioFile(file: File): Promise<AudioAnalysis> {
 
 export function formatClientAnalysisMessage(
   analysis: Pick<AudioAnalysis, "bpm" | "musicalKey" | "duration">,
+  options?: { preservedExisting?: boolean },
 ): string {
   if (hasAnalysisValues(analysis)) {
-    return formatAnalysisSuccessMessage(analysis);
+    const base = formatAnalysisSuccessMessage(analysis);
+    if (options?.preservedExisting) {
+      return `${base} Valeurs existantes conservées — utilisez « Ré-analyser l'audio » pour appliquer.`;
+    }
+    return base;
   }
   return "BPM/clé/durée non détectés automatiquement — complétez manuellement.";
 }

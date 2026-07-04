@@ -8,8 +8,41 @@ export type AudioAnalysisResult = {
   sources: string[];
 };
 
+export type AudioAnalysisOptions = {
+  /** Fallback très secondaire — uniquement si tags/audio n'ont rien donné */
+  useFilenameHints?: boolean;
+};
+
 export const AUDIO_ANALYSIS_FAILED_MESSAGE =
   "Fichier enregistré, mais BPM/clé/durée non détectés automatiquement.";
+
+/** Camelot → clé (tags DJ courants) */
+const CAMELOT_TO_KEY: Record<string, string> = {
+  "1A": "Abm",
+  "1B": "B",
+  "2A": "Ebm",
+  "2B": "Gb",
+  "3A": "Bbm",
+  "3B": "Db",
+  "4A": "Fm",
+  "4B": "Ab",
+  "5A": "Cm",
+  "5B": "Eb",
+  "6A": "Gm",
+  "6B": "Bb",
+  "7A": "Dm",
+  "7B": "F",
+  "8A": "Am",
+  "8B": "C",
+  "9A": "Em",
+  "9B": "G",
+  "10A": "Bm",
+  "10B": "D",
+  "11A": "F#m",
+  "11B": "A",
+  "12A": "C#m",
+  "12B": "E",
+};
 
 export function parseFilenameHints(filename: string): {
   bpm?: number;
@@ -34,8 +67,17 @@ export function parseFilenameHints(filename: string): {
 export function normalizeMusicalKey(raw: string | undefined): string | undefined {
   if (!raw?.trim()) return undefined;
 
-  const cleaned = raw
-    .trim()
+  const trimmed = raw.trim();
+
+  const camelot = trimmed.match(/^(\d{1,2}[AB])$/i);
+  if (camelot) {
+    const mapped = CAMELOT_TO_KEY[camelot[1].toUpperCase()];
+    if (mapped && MUSICAL_KEYS.includes(mapped as (typeof MUSICAL_KEYS)[number])) {
+      return mapped;
+    }
+  }
+
+  const cleaned = trimmed
     .replace(/\s+/g, "")
     .replace(/major/i, "")
     .replace(/minor/i, "m")
@@ -92,4 +134,76 @@ export function hasAnalysisValues(
   result: Pick<AudioAnalysisResult, "bpm" | "musicalKey" | "duration">,
 ): boolean {
   return Boolean(result.bpm || result.musicalKey || result.duration);
+}
+
+export type ReanalysisPreview = {
+  summary: string;
+  detailLines: string[];
+  bpmDetected: boolean;
+  keyDetected: boolean;
+  durationDetected: boolean;
+  bpm?: number;
+  musicalKey?: string;
+  duration?: number;
+};
+
+export function formatReanalysisPreview(
+  result: AudioAnalysisResult,
+): ReanalysisPreview {
+  const bpmDetected = Boolean(result.bpm);
+  const keyDetected = Boolean(result.musicalKey);
+  const durationDetected = Boolean(result.duration);
+
+  const detailLines: string[] = [];
+  if (!bpmDetected) detailLines.push("BPM non détecté automatiquement");
+  if (!keyDetected) detailLines.push("Clé non détectée automatiquement");
+  if (!durationDetected) detailLines.push("Durée non détectée automatiquement");
+
+  const parts: string[] = [];
+  if (bpmDetected) parts.push(`${result.bpm} BPM`);
+  if (keyDetected) parts.push(result.musicalKey!);
+  if (durationDetected) parts.push(formatDuration(result.duration!));
+
+  const summary =
+    parts.length > 0
+      ? `Analyse trouvée : ${parts.join(" · ")}`
+      : "Aucune valeur détectée automatiquement";
+
+  return {
+    summary,
+    detailLines,
+    bpmDetected,
+    keyDetected,
+    durationDetected,
+    bpm: result.bpm,
+    musicalKey: result.musicalKey,
+    duration: result.duration,
+  };
+}
+
+/** Remplit uniquement les champs vides — ne jamais écraser une valeur existante */
+export function applyAnalysisFillEmptyOnly<T extends {
+  bpm?: number;
+  musicalKey?: string;
+  duration?: number;
+}>(
+  current: { bpm?: number | string; musicalKey?: string; duration?: number | string },
+  detected: T,
+): T {
+  const applied: T = {} as T;
+
+  const currentBpm = Number(current.bpm);
+  const currentDuration = Number(current.duration);
+
+  if (detected.bpm && (!current.bpm || currentBpm < 1)) {
+    applied.bpm = detected.bpm;
+  }
+  if (detected.musicalKey && !current.musicalKey?.trim()) {
+    applied.musicalKey = detected.musicalKey;
+  }
+  if (detected.duration && (!current.duration || currentDuration < 1)) {
+    applied.duration = detected.duration;
+  }
+
+  return applied;
 }

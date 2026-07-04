@@ -145,6 +145,11 @@ export function BeatList({ beats }: BeatListProps) {
                   Modifier
                 </Button>
               </Link>
+              <Link href={`/admin/beats/${beat.id}/edit#reanalyze`}>
+                <Button type="button" variant="outline" disabled={isPending}>
+                  Ré-analyser
+                </Button>
+              </Link>
               {beat.status === "draft" && (
                 <Button
                   type="button"
