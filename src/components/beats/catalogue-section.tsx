@@ -2,7 +2,7 @@
 
 import { Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { BeatCatalogueTable } from "@/components/beats/beat-catalogue-table";
+import { BeatCatalogueList } from "@/components/beats/beat-catalogue-list";
 import { usePlayer } from "@/components/audio/player-provider";
 import { beatsToPlayerTracks } from "@/lib/beats/player";
 import { Input } from "@/components/ui/input";
@@ -100,8 +100,8 @@ export function CatalogueSection({ beats, id = "catalogue" }: CatalogueSectionPr
       <div className="flex flex-col gap-6">
         <div className="flex flex-col gap-4 border-b border-border pb-6 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h1 className="text-2xl font-semibold lowercase tracking-tight text-foreground">
-              tout les beats leskud
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+              Tous les beats LeSkud
             </h1>
             <p className="mt-1.5 text-sm text-muted">
               {filteredBeats.length} instru
@@ -167,7 +167,7 @@ export function CatalogueSection({ beats, id = "catalogue" }: CatalogueSectionPr
           {emptyMessage}
         </div>
       ) : (
-        <BeatCatalogueTable beats={filteredBeats} playlist={playlist} />
+        <BeatCatalogueList beats={filteredBeats} playlist={playlist} />
       )}
     </section>
   );
