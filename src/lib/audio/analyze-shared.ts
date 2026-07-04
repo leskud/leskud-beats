@@ -120,14 +120,11 @@ export function normalizeMusicalKey(raw: string | undefined): string | undefined
 export function formatAnalysisSuccessMessage(
   result: Pick<AudioAnalysisResult, "bpm" | "musicalKey" | "duration">,
 ): string {
-  const parts: string[] = [];
-
-  if (result.bpm) parts.push(`${result.bpm} BPM`);
-  if (result.musicalKey) parts.push(result.musicalKey);
-  if (result.duration) parts.push(formatDuration(result.duration));
-
-  if (parts.length === 0) return AUDIO_ANALYSIS_FAILED_MESSAGE;
-  return `Analyse audio terminée : ${parts.join(" · ")}`;
+  const summary = buildReanalysisSummaryLabel(result);
+  if (summary === "Aucune valeur détectée automatiquement") {
+    return AUDIO_ANALYSIS_FAILED_MESSAGE;
+  }
+  return summary;
 }
 
 export function hasAnalysisValues(
@@ -147,6 +144,77 @@ export type ReanalysisPreview = {
   duration?: number;
 };
 
+function buildDetectionSummary(
+  result: Pick<AudioAnalysisResult, "bpm" | "musicalKey" | "duration">,
+): string | null {
+  const bpmDetected = Boolean(result.bpm);
+  const keyDetected = Boolean(result.musicalKey);
+  const durationDetected = Boolean(result.duration);
+  const detectedCount = [bpmDetected, keyDetected, durationDetected].filter(
+    Boolean,
+  ).length;
+
+  if (detectedCount === 0) return null;
+
+  if (detectedCount === 3) {
+    return `${result.bpm} BPM · ${result.musicalKey} · ${formatDuration(result.duration!)}`;
+  }
+
+  if (durationDetected && !bpmDetected && !keyDetected) {
+    return formatDuration(result.duration!);
+  }
+
+  if (bpmDetected && !keyDetected && !durationDetected) {
+    return `${result.bpm} BPM`;
+  }
+
+  if (keyDetected && !bpmDetected && !durationDetected) {
+    return result.musicalKey!;
+  }
+
+  const parts: string[] = [];
+  if (bpmDetected) parts.push(`${result.bpm} BPM`);
+  if (keyDetected) parts.push(result.musicalKey!);
+  if (durationDetected) parts.push(formatDuration(result.duration!));
+  return parts.join(" · ");
+}
+
+function buildReanalysisSummaryLabel(
+  result: Pick<AudioAnalysisResult, "bpm" | "musicalKey" | "duration">,
+): string {
+  const bpmDetected = Boolean(result.bpm);
+  const keyDetected = Boolean(result.musicalKey);
+  const durationDetected = Boolean(result.duration);
+  const detectedCount = [bpmDetected, keyDetected, durationDetected].filter(
+    Boolean,
+  ).length;
+
+  if (detectedCount === 0) {
+    return "Aucune valeur détectée automatiquement";
+  }
+
+  const valueSummary = buildDetectionSummary(result);
+  if (!valueSummary) return "Aucune valeur détectée automatiquement";
+
+  if (detectedCount === 3) {
+    return `Analyse trouvée : ${valueSummary}`;
+  }
+
+  if (durationDetected && !bpmDetected && !keyDetected) {
+    return `Durée détectée : ${valueSummary}`;
+  }
+
+  if (bpmDetected && !keyDetected && !durationDetected) {
+    return `BPM détecté : ${valueSummary}`;
+  }
+
+  if (keyDetected && !bpmDetected && !durationDetected) {
+    return `Clé détectée : ${valueSummary}`;
+  }
+
+  return `Analyse partielle : ${valueSummary}`;
+}
+
 export function formatReanalysisPreview(
   result: AudioAnalysisResult,
 ): ReanalysisPreview {
@@ -155,22 +223,24 @@ export function formatReanalysisPreview(
   const durationDetected = Boolean(result.duration);
 
   const detailLines: string[] = [];
-  if (!bpmDetected) detailLines.push("BPM non détecté automatiquement");
-  if (!keyDetected) detailLines.push("Clé non détectée automatiquement");
-  if (!durationDetected) detailLines.push("Durée non détectée automatiquement");
-
-  const parts: string[] = [];
-  if (bpmDetected) parts.push(`${result.bpm} BPM`);
-  if (keyDetected) parts.push(result.musicalKey!);
-  if (durationDetected) parts.push(formatDuration(result.duration!));
-
-  const summary =
-    parts.length > 0
-      ? `Analyse trouvée : ${parts.join(" · ")}`
-      : "Aucune valeur détectée automatiquement";
+  if (!bpmDetected) {
+    detailLines.push(
+      "BPM non détecté automatiquement — à renseigner manuellement.",
+    );
+  }
+  if (!keyDetected) {
+    detailLines.push(
+      "Clé non détectée automatiquement — à renseigner manuellement.",
+    );
+  }
+  if (!durationDetected) {
+    detailLines.push(
+      "Durée non détectée automatiquement — à renseigner manuellement.",
+    );
+  }
 
   return {
-    summary,
+    summary: buildReanalysisSummaryLabel(result),
     detailLines,
     bpmDetected,
     keyDetected,

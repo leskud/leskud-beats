@@ -338,6 +338,11 @@ export function BeatEditForm({ beat }: BeatEditFormProps) {
                 ))}
               </ul>
             )}
+            {reanalysis && !reanalysis.keyDetected && musicalKey.trim() && (
+              <p className="text-amber-300">
+                La clé actuelle n&apos;a pas été confirmée automatiquement.
+              </p>
+            )}
             <div className="flex flex-wrap gap-2 pt-1">
               <Button
                 type="button"

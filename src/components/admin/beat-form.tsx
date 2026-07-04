@@ -499,7 +499,7 @@ export function BeatForm() {
               htmlFor="stemsZip"
               className="mb-1.5 block text-sm text-muted"
             >
-              Stems + Exclusive (ZIP)
+              Stems (ZIP — Premium + Stems / Unlimited + Stems)
             </label>
             <Input
               id="stemsZip"
@@ -508,8 +508,8 @@ export function BeatForm() {
               accept=".zip,.rar"
             />
             <HelpText>
-              ZIP recommandé. Un seul fichier pour Stems et Exclusive — gros
-              fichiers supportés via R2.
+              ZIP recommandé. Un seul fichier pour les licences Stems et
+              Unlimited — gros fichiers supportés via R2.
             </HelpText>
           </div>
         </div>
