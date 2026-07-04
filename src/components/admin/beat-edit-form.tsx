@@ -128,8 +128,17 @@ export function BeatEditForm({ beat }: BeatEditFormProps) {
     }
   }
 
+  const isSoldExclusive = beat.status === "sold_exclusive";
+
   return (
     <form onSubmit={handleSubmit} encType="multipart/form-data" className="space-y-8">
+      {isSoldExclusive && (
+        <div className="rounded-lg border border-gold/30 bg-gold/10 px-4 py-3 text-sm text-gold">
+          Beat vendu en Exclusive : il reste masqué du catalogue, mais vous
+          pouvez mettre à jour les fichiers livrables (MP3, WAV, Stems, cover).
+        </div>
+      )}
+
       {error && (
         <div className="rounded-lg border border-red-200/20 bg-red-500/10 px-4 py-3 text-sm text-red-300">
           {error}
@@ -256,23 +265,38 @@ export function BeatEditForm({ beat }: BeatEditFormProps) {
             <label htmlFor="status" className="mb-1.5 block text-sm text-muted">
               Statut *
             </label>
-            <Select id="status" name="status" defaultValue={beat.status}>
-              <option value="draft">Brouillon</option>
-              <option value="published">Publié</option>
-            </Select>
+            {isSoldExclusive ? (
+              <>
+                <Input
+                  id="status"
+                  value="Exclusive vendu"
+                  readOnly
+                  disabled
+                  className="opacity-70"
+                />
+                <input type="hidden" name="status" value="sold_exclusive" />
+              </>
+            ) : (
+              <Select id="status" name="status" defaultValue={beat.status}>
+                <option value="draft">Brouillon</option>
+                <option value="published">Publié</option>
+              </Select>
+            )}
           </div>
 
-          <div className="sm:col-span-2">
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                name="isFeatured"
-                value="true"
-                defaultChecked={beat.is_featured}
-              />
-              Beat du moment (homepage)
-            </label>
-          </div>
+          {!isSoldExclusive && (
+            <div className="sm:col-span-2">
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  name="isFeatured"
+                  value="true"
+                  defaultChecked={beat.is_featured}
+                />
+                Beat du moment (homepage)
+              </label>
+            </div>
+          )}
 
           <div className="sm:col-span-2">
             <label htmlFor="tags" className="mb-1.5 block text-sm text-muted">

@@ -26,19 +26,12 @@ export async function POST(request: Request, context: RouteContext) {
 
   const { data: beat } = await auth.supabase
     .from("beats")
-    .select("id, status")
+    .select("id")
     .eq("id", beatId)
     .maybeSingle();
 
   if (!beat) {
     return NextResponse.json({ error: "Beat introuvable." }, { status: 404 });
-  }
-
-  if (beat.status === "sold_exclusive") {
-    return NextResponse.json(
-      { error: "Beat exclusive vendu — upload impossible." },
-      { status: 403 },
-    );
   }
 
   let body: { kind?: string; filename?: string };

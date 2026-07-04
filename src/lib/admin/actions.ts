@@ -60,11 +60,16 @@ async function syncStemsLicensePaths(
   supabase: AdminSupabase,
   beatId: string,
   stemsPath: string,
+  keepUnavailable = false,
 ) {
+  const patch = keepUnavailable
+    ? { storage_path: stemsPath }
+    : { storage_path: stemsPath, is_available: true };
+
   for (const licenseType of ["stems", "unlimited", "exclusive"] as const) {
     await supabase
       .from("beat_licenses")
-      .update({ storage_path: stemsPath, is_available: true })
+      .update(patch)
       .eq("beat_id", beatId)
       .eq("license_type", licenseType);
   }
@@ -109,6 +114,7 @@ async function applyMp3Upload(
   supabase: AdminSupabase,
   beatId: string,
   mp3Path: string,
+  keepUnavailable = false,
 ) {
   const mp3Buffer = await downloadBeatBuffer(
     supabase,
@@ -128,9 +134,13 @@ async function applyMp3Upload(
     "audio/mpeg",
   );
 
+  const patch = keepUnavailable
+    ? { storage_path: mp3Path }
+    : { storage_path: mp3Path, is_available: true };
+
   await supabase
     .from("beat_licenses")
-    .update({ storage_path: mp3Path, is_available: true })
+    .update(patch)
     .eq("beat_id", beatId)
     .eq("license_type", "mp3");
 
@@ -363,8 +373,8 @@ export async function updateBeat(beatId: string, formData: FormData) {
     .single();
 
   if (!existing) return { error: "Beat introuvable." };
-  if (existing.status === "sold_exclusive")
-    return { error: "Beat exclusive vendu — modification limitée." };
+
+  const isSoldExclusive = existing.status === "sold_exclusive";
 
   try {
     let coverPath = existing.cover_path;
@@ -383,11 +393,21 @@ export async function updateBeat(beatId: string, formData: FormData) {
     }
 
     if (uploadedMp3Path) {
-      previewPath = await applyMp3Upload(supabase, beatId, uploadedMp3Path);
+      previewPath = await applyMp3Upload(
+        supabase,
+        beatId,
+        uploadedMp3Path,
+        isSoldExclusive,
+      );
     } else if (mp3File) {
       const mp3Path = getBeatFilePath(beatId, "mp3");
       await uploadBeatFile(supabase, STORAGE_BUCKETS.beats, mp3Path, mp3File);
-      previewPath = await applyMp3Upload(supabase, beatId, mp3Path);
+      previewPath = await applyMp3Upload(
+        supabase,
+        beatId,
+        mp3Path,
+        isSoldExclusive,
+      );
     } else if (formData.get("regeneratePreview") === "true") {
       const mp3License = existing.beat_licenses?.find(
         (l: { license_type: string }) => l.license_type === "mp3",
@@ -406,7 +426,7 @@ export async function updateBeat(beatId: string, formData: FormData) {
     if (uploadedWavPath) {
       await supabase
         .from("beat_licenses")
-        .update({ storage_path: uploadedWavPath, is_available: true })
+        .update({ storage_path: uploadedWavPath })
         .eq("beat_id", beatId)
         .eq("license_type", "wav");
     } else if (wavFile) {
@@ -414,13 +434,22 @@ export async function updateBeat(beatId: string, formData: FormData) {
       await uploadBeatFile(supabase, STORAGE_BUCKETS.beats, wavPath, wavFile);
       await supabase
         .from("beat_licenses")
-        .update({ storage_path: wavPath, is_available: true })
+        .update(
+          isSoldExclusive
+            ? { storage_path: wavPath }
+            : { storage_path: wavPath, is_available: true },
+        )
         .eq("beat_id", beatId)
         .eq("license_type", "wav");
     }
 
     if (uploadedStemsPath) {
-      await syncStemsLicensePaths(supabase, beatId, uploadedStemsPath);
+      await syncStemsLicensePaths(
+        supabase,
+        beatId,
+        uploadedStemsPath,
+        isSoldExclusive,
+      );
     } else if (stemsFile) {
       const stemsPath = getBeatFilePath(beatId, "stems");
       await uploadBeatFile(
@@ -429,8 +458,19 @@ export async function updateBeat(beatId: string, formData: FormData) {
         stemsPath,
         stemsFile,
       );
-      await syncStemsLicensePaths(supabase, beatId, stemsPath);
+      await syncStemsLicensePaths(
+        supabase,
+        beatId,
+        stemsPath,
+        isSoldExclusive,
+      );
     }
+
+    const nextStatus = isSoldExclusive
+      ? "sold_exclusive"
+      : status === "published"
+        ? "published"
+        : "draft";
 
     const { error } = await supabase
       .from("beats")
@@ -443,8 +483,8 @@ export async function updateBeat(beatId: string, formData: FormData) {
         mood,
         tags: parseTags(tagsRaw),
         duration_seconds: durationSeconds,
-        status: status === "published" ? "published" : "draft",
-        is_featured: isFeatured,
+        status: nextStatus,
+        is_featured: isSoldExclusive ? false : isFeatured,
         cover_path: coverPath,
         preview_path: previewPath,
       })
@@ -452,7 +492,9 @@ export async function updateBeat(beatId: string, formData: FormData) {
 
     if (error) throw new Error(error.message);
 
-    await refreshBeatLicenseAvailability(supabase, beatId);
+    if (!isSoldExclusive) {
+      await refreshBeatLicenseAvailability(supabase, beatId);
+    }
 
     revalidatePath("/");
   revalidatePath("/admin");
