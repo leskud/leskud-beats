@@ -2,6 +2,11 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import {
+  uploadBeatFilesFromBrowser,
+  type UploadProgressCallback,
+} from "@/lib/admin/client-upload";
+import type { BeatFileKind } from "@/lib/admin/beat-paths";
 import { GENRES, MOODS, MUSICAL_KEYS } from "@/lib/constants";
 import type { BeatWithLicenses } from "@/types/database";
 import { Button } from "@/components/ui/button";
@@ -13,10 +18,20 @@ type BeatEditFormProps = {
   beat: BeatWithLicenses;
 };
 
+function getSelectedFile(form: HTMLFormElement, name: string): File | undefined {
+  const input = form.elements.namedItem(name);
+  if (!(input instanceof HTMLInputElement) || input.type !== "file") {
+    return undefined;
+  }
+  const file = input.files?.[0];
+  return file && file.size > 0 ? file : undefined;
+}
+
 export function BeatEditForm({ beat }: BeatEditFormProps) {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
   const isKnownGenre = GENRES.includes(
     beat.genre as (typeof GENRES)[number],
@@ -28,14 +43,63 @@ export function BeatEditForm({ beat }: BeatEditFormProps) {
     isKnownGenre ? "" : beat.genre,
   );
 
+  const onUploadProgress: UploadProgressCallback = (message) => {
+    setStatusMessage(message);
+  };
+
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
+    setStatusMessage(null);
     setIsSubmitting(true);
 
-    const formData = new FormData(event.currentTarget);
+    const form = event.currentTarget;
+    const formData = new FormData(form);
 
     try {
+      const filesToUpload: Partial<Record<BeatFileKind, File>> = {};
+      const cover = getSelectedFile(form, "cover");
+      const mp3 = getSelectedFile(form, "mp3");
+      const wav = getSelectedFile(form, "wav");
+      const stems = getSelectedFile(form, "stemsZip");
+
+      if (cover) filesToUpload.cover = cover;
+      if (mp3) filesToUpload.mp3 = mp3;
+      if (wav) filesToUpload.wav = wav;
+      if (stems) filesToUpload.stems = stems;
+
+      const hasLargeUpload = Boolean(wav || stems || mp3);
+
+      if (hasLargeUpload) {
+        setStatusMessage("Préparation de l'upload vers Supabase…");
+      }
+
+      const uploadedPaths = await uploadBeatFilesFromBrowser(
+        beat.id,
+        filesToUpload,
+        onUploadProgress,
+      );
+
+      formData.delete("cover");
+      formData.delete("mp3");
+      formData.delete("wav");
+      formData.delete("stemsZip");
+
+      if (uploadedPaths.cover) {
+        formData.set("uploadedCoverPath", uploadedPaths.cover);
+      }
+      if (uploadedPaths.mp3) {
+        formData.set("uploadedMp3Path", uploadedPaths.mp3);
+      }
+      if (uploadedPaths.wav) {
+        formData.set("uploadedWavPath", uploadedPaths.wav);
+      }
+      if (uploadedPaths.stems) {
+        formData.set("uploadedStemsPath", uploadedPaths.stems);
+      }
+
+      setStatusMessage("Enregistrement des métadonnées…");
+
       const response = await fetch(`/api/admin/beats/${beat.id}`, {
         method: "PATCH",
         body: formData,
@@ -50,10 +114,15 @@ export function BeatEditForm({ beat }: BeatEditFormProps) {
         return;
       }
 
+      setStatusMessage("Upload terminé — beat mis à jour.");
       router.push("/admin");
       router.refresh();
-    } catch {
-      setError("Erreur réseau lors de la mise à jour.");
+    } catch (uploadError) {
+      const message =
+        uploadError instanceof Error
+          ? uploadError.message
+          : "Erreur réseau lors de la mise à jour.";
+      setError(message);
     } finally {
       setIsSubmitting(false);
     }
@@ -64,6 +133,12 @@ export function BeatEditForm({ beat }: BeatEditFormProps) {
       {error && (
         <div className="rounded-lg border border-red-200/20 bg-red-500/10 px-4 py-3 text-sm text-red-300">
           {error}
+        </div>
+      )}
+
+      {statusMessage && (
+        <div className="rounded-lg border border-gold/20 bg-gold/10 px-4 py-3 text-sm text-gold">
+          {statusMessage}
         </div>
       )}
 
@@ -230,8 +305,9 @@ export function BeatEditForm({ beat }: BeatEditFormProps) {
       <section className="space-y-4">
         <h2 className="text-lg font-medium">Remplacer des fichiers (optionnel)</h2>
         <p className="text-sm text-muted">
-          Laissez vide pour conserver les fichiers actuels. Si vous changez le
-          MP3, la preview filigranée sera régénérée automatiquement.
+          Les fichiers MP3, WAV et Stems sont envoyés directement vers Supabase
+          Storage (contourne la limite Vercel). Laissez vide pour conserver les
+          fichiers actuels.
         </p>
         <label className="flex items-center gap-2 text-sm">
           <input
@@ -246,12 +322,12 @@ export function BeatEditForm({ beat }: BeatEditFormProps) {
           <Input name="cover" type="file" accept="image/*" />
           <Input name="mp3" type="file" accept="audio/mpeg,.mp3" />
           <Input name="wav" type="file" accept="audio/wav,.wav" />
-          <Input name="stemsZip" type="file" accept=".zip,.rar" />
+          <Input name="stemsZip" type="file" accept=".zip,application/zip" />
         </div>
       </section>
 
       <Button type="submit" disabled={isSubmitting}>
-        {isSubmitting ? "Mise à jour..." : "Enregistrer les modifications"}
+        {isSubmitting ? "Enregistrement…" : "Enregistrer les modifications"}
       </Button>
     </form>
   );

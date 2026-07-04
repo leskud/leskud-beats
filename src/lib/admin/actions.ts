@@ -7,6 +7,7 @@ import {
   STORAGE_BUCKETS,
 } from "@/lib/constants";
 import { requireAdmin } from "@/lib/admin/require-admin";
+import { getBeatFilePath, resolveCoverPath } from "@/lib/admin/beat-paths";
 import {
   getFileExtension,
   parseTags,
@@ -46,6 +47,94 @@ function getFile(formData: FormData, key: string): File | null {
   const value = formData.get(key);
   if (value instanceof File && value.size > 0) return value;
   return null;
+}
+
+function getUploadedPath(formData: FormData, key: string): string | null {
+  const value = String(formData.get(key) ?? "").trim();
+  return value || null;
+}
+
+type AdminSupabase = Awaited<ReturnType<typeof requireAdmin>>["supabase"];
+
+async function syncStemsLicensePaths(
+  supabase: AdminSupabase,
+  beatId: string,
+  stemsPath: string,
+) {
+  for (const licenseType of ["stems", "unlimited", "exclusive"] as const) {
+    await supabase
+      .from("beat_licenses")
+      .update({ storage_path: stemsPath, is_available: true })
+      .eq("beat_id", beatId)
+      .eq("license_type", licenseType);
+  }
+}
+
+async function refreshBeatLicenseAvailability(
+  supabase: AdminSupabase,
+  beatId: string,
+) {
+  const { data: updatedLicenses } = await supabase
+    .from("beat_licenses")
+    .select("*")
+    .eq("beat_id", beatId);
+
+  if (!updatedLicenses) return;
+
+  const canExclusive =
+    updatedLicenses.some(
+      (l) => l.license_type === "mp3" && l.storage_path && l.is_available,
+    ) &&
+    updatedLicenses.some(
+      (l) => l.license_type === "wav" && l.storage_path && l.is_available,
+    );
+  const hasStems = updatedLicenses.some(
+    (l) => l.license_type === "stems" && l.storage_path && l.is_available,
+  );
+
+  await supabase
+    .from("beat_licenses")
+    .update({ is_available: canExclusive })
+    .eq("beat_id", beatId)
+    .eq("license_type", "exclusive");
+
+  await supabase
+    .from("beat_licenses")
+    .update({ is_available: hasStems })
+    .eq("beat_id", beatId)
+    .eq("license_type", "unlimited");
+}
+
+async function applyMp3Upload(
+  supabase: AdminSupabase,
+  beatId: string,
+  mp3Path: string,
+) {
+  const mp3Buffer = await downloadBeatBuffer(
+    supabase,
+    STORAGE_BUCKETS.beats,
+    mp3Path,
+  );
+  const previewPath = `${beatId}/preview.mp3`;
+  const previewBuffer = await generateWatermarkedPreview(
+    mp3Buffer,
+    getWatermarkTagPath(),
+  );
+  await uploadBeatBuffer(
+    supabase,
+    STORAGE_BUCKETS.previews,
+    previewPath,
+    previewBuffer,
+    "audio/mpeg",
+  );
+
+  await supabase
+    .from("beat_licenses")
+    .update({ storage_path: mp3Path, is_available: true })
+    .eq("beat_id", beatId)
+    .eq("license_type", "mp3");
+
+  return previewPath;
 }
 
 async function regeneratePreviewFromStoredMp3(
@@ -255,6 +344,11 @@ export async function updateBeat(beatId: string, formData: FormData) {
   const wavFile = getFile(formData, "wav");
   const stemsFile = getFile(formData, "stemsZip");
 
+  const uploadedCoverPath = getUploadedPath(formData, "uploadedCoverPath");
+  const uploadedMp3Path = getUploadedPath(formData, "uploadedMp3Path");
+  const uploadedWavPath = getUploadedPath(formData, "uploadedWavPath");
+  const uploadedStemsPath = getUploadedPath(formData, "uploadedStemsPath");
+
   if (!title) return { error: "Le titre est requis." };
   if (!bpm || bpm < 1 || bpm > 300) return { error: "BPM invalide." };
   if (!musicalKey || !genre || !mood)
@@ -276,8 +370,10 @@ export async function updateBeat(beatId: string, formData: FormData) {
     let coverPath = existing.cover_path;
     let previewPath = existing.preview_path;
 
-    if (coverFile) {
-      coverPath = `${beatId}/cover${getFileExtension(coverFile.name)}`;
+    if (uploadedCoverPath) {
+      coverPath = uploadedCoverPath;
+    } else if (coverFile) {
+      coverPath = resolveCoverPath(beatId, coverFile.name);
       await uploadBeatFile(
         supabase,
         STORAGE_BUCKETS.covers,
@@ -286,28 +382,12 @@ export async function updateBeat(beatId: string, formData: FormData) {
       );
     }
 
-    if (mp3File) {
-      const mp3Buffer = Buffer.from(await mp3File.arrayBuffer());
-      previewPath = `${beatId}/preview.mp3`;
-      const previewBuffer = await generateWatermarkedPreview(
-        mp3Buffer,
-        getWatermarkTagPath(),
-      );
-      await uploadBeatBuffer(
-        supabase,
-        STORAGE_BUCKETS.previews,
-        previewPath,
-        previewBuffer,
-        "audio/mpeg",
-      );
-
-      const mp3Path = `${beatId}/mp3${getFileExtension(mp3File.name)}`;
+    if (uploadedMp3Path) {
+      previewPath = await applyMp3Upload(supabase, beatId, uploadedMp3Path);
+    } else if (mp3File) {
+      const mp3Path = getBeatFilePath(beatId, "mp3");
       await uploadBeatFile(supabase, STORAGE_BUCKETS.beats, mp3Path, mp3File);
-      await supabase
-        .from("beat_licenses")
-        .update({ storage_path: mp3Path, is_available: true })
-        .eq("beat_id", beatId)
-        .eq("license_type", "mp3");
+      previewPath = await applyMp3Upload(supabase, beatId, mp3Path);
     } else if (formData.get("regeneratePreview") === "true") {
       const mp3License = existing.beat_licenses?.find(
         (l: { license_type: string }) => l.license_type === "mp3",
@@ -323,8 +403,14 @@ export async function updateBeat(beatId: string, formData: FormData) {
       }
     }
 
-    if (wavFile) {
-      const wavPath = `${beatId}/wav${getFileExtension(wavFile.name)}`;
+    if (uploadedWavPath) {
+      await supabase
+        .from("beat_licenses")
+        .update({ storage_path: uploadedWavPath, is_available: true })
+        .eq("beat_id", beatId)
+        .eq("license_type", "wav");
+    } else if (wavFile) {
+      const wavPath = getBeatFilePath(beatId, "wav");
       await uploadBeatFile(supabase, STORAGE_BUCKETS.beats, wavPath, wavFile);
       await supabase
         .from("beat_licenses")
@@ -333,29 +419,17 @@ export async function updateBeat(beatId: string, formData: FormData) {
         .eq("license_type", "wav");
     }
 
-    if (stemsFile) {
-      const stemsPath = `${beatId}/stems${getFileExtension(stemsFile.name)}`;
+    if (uploadedStemsPath) {
+      await syncStemsLicensePaths(supabase, beatId, uploadedStemsPath);
+    } else if (stemsFile) {
+      const stemsPath = getBeatFilePath(beatId, "stems");
       await uploadBeatFile(
         supabase,
         STORAGE_BUCKETS.beats,
         stemsPath,
         stemsFile,
       );
-      await supabase
-        .from("beat_licenses")
-        .update({ storage_path: stemsPath, is_available: true })
-        .eq("beat_id", beatId)
-        .eq("license_type", "stems");
-      await supabase
-        .from("beat_licenses")
-        .update({ storage_path: stemsPath, is_available: true })
-        .eq("beat_id", beatId)
-        .eq("license_type", "unlimited");
-      await supabase
-        .from("beat_licenses")
-        .update({ storage_path: stemsPath, is_available: true })
-        .eq("beat_id", beatId)
-        .eq("license_type", "exclusive");
+      await syncStemsLicensePaths(supabase, beatId, stemsPath);
     }
 
     const { error } = await supabase
@@ -378,35 +452,7 @@ export async function updateBeat(beatId: string, formData: FormData) {
 
     if (error) throw new Error(error.message);
 
-    const { data: updatedLicenses } = await supabase
-      .from("beat_licenses")
-      .select("*")
-      .eq("beat_id", beatId);
-
-    if (updatedLicenses) {
-      const canExclusive =
-        updatedLicenses.some(
-          (l) => l.license_type === "mp3" && l.storage_path && l.is_available,
-        ) &&
-        updatedLicenses.some(
-          (l) => l.license_type === "wav" && l.storage_path && l.is_available,
-        );
-      const hasStems = updatedLicenses.some(
-        (l) => l.license_type === "stems" && l.storage_path && l.is_available,
-      );
-
-      await supabase
-        .from("beat_licenses")
-        .update({ is_available: canExclusive })
-        .eq("beat_id", beatId)
-        .eq("license_type", "exclusive");
-
-      await supabase
-        .from("beat_licenses")
-        .update({ is_available: hasStems })
-        .eq("beat_id", beatId)
-        .eq("license_type", "unlimited");
-    }
+    await refreshBeatLicenseAvailability(supabase, beatId);
 
     revalidatePath("/");
   revalidatePath("/admin");
