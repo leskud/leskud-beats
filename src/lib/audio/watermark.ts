@@ -1,7 +1,5 @@
 import { execFile } from "node:child_process";
 import {
-  accessSync,
-  constants,
   mkdirSync,
   readFileSync,
   rmSync,
@@ -10,7 +8,13 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { resolveFfmpegExecutable } from "@/lib/audio/ffmpeg-path";
+import { getFfmpegDiagnostics, resolveFfmpegExecutable } from "@/lib/audio/ffmpeg-path";
+import { previewLog, previewLogError } from "@/lib/audio/preview-log";
+import {
+  getWatermarkDiagnostics,
+  resolveWatermarkTagPath,
+} from "@/lib/audio/watermark-path";
+import { isPreviewGenerationEnabled } from "@/lib/config/env";
 import { parseFile } from "music-metadata";
 
 const execFileAsync = promisify(execFile);
@@ -95,15 +99,27 @@ function buildWatermarkFilter(
 
 export async function generateWatermarkedPreview(
   mp3Buffer: Buffer,
-  watermarkPath: string,
+  beatId?: string,
 ): Promise<Buffer> {
-  const ffmpegExecutable = resolveFfmpegExecutable();
+  previewLog("preview_start", {
+    beat_id: beatId ?? null,
+    preview_enabled: isPreviewGenerationEnabled(),
+    source_mp3_bytes: mp3Buffer.byteLength,
+    ...getFfmpegDiagnostics(),
+    ...getWatermarkDiagnostics(),
+  });
 
-  try {
-    accessSync(watermarkPath, constants.R_OK);
-  } catch {
-    throw new Error("Watermark tag audio file missing");
-  }
+  const ffmpegExecutable = resolveFfmpegExecutable();
+  const watermarkPath = resolveWatermarkTagPath();
+
+  previewLog("preview_assets_ready", {
+    beat_id: beatId ?? null,
+    ffmpeg_path_resolved: ffmpegExecutable,
+    ffmpeg_exists: true,
+    watermark_path: watermarkPath,
+    watermark_exists: true,
+    tmpdir: tmpdir(),
+  });
 
   const tempDir = join(tmpdir(), `leskud-preview-${Date.now()}`);
   mkdirSync(tempDir, { recursive: true });
@@ -113,11 +129,24 @@ export async function generateWatermarkedPreview(
 
   try {
     writeFileSync(inputPath, mp3Buffer);
+    previewLog("source_mp3_written", {
+      beat_id: beatId ?? null,
+      source_mp3_downloaded: true,
+      input_path: inputPath,
+      input_bytes: mp3Buffer.byteLength,
+    });
 
     const durationSeconds = await getAudioDurationSeconds(inputPath);
     const tagDurationSeconds =
       await getWatermarkTagDurationSeconds(watermarkPath);
     const filter = buildWatermarkFilter(durationSeconds, tagDurationSeconds);
+
+    previewLog("ffmpeg_exec_start", {
+      beat_id: beatId ?? null,
+      duration_seconds: durationSeconds,
+      tag_count: getTagTimestamps(durationSeconds, tagDurationSeconds).length,
+      ffmpeg_path_resolved: ffmpegExecutable,
+    });
 
     await execFileAsync(
       ffmpegExecutable,
@@ -143,12 +172,24 @@ export async function generateWatermarkedPreview(
       },
     );
 
-    return readFileSync(outputPath);
+    const outputBuffer = readFileSync(outputPath);
+    previewLog("preview_success", {
+      beat_id: beatId ?? null,
+      output_bytes: outputBuffer.byteLength,
+      ffmpeg_exit_code: 0,
+    });
+
+    return outputBuffer;
+  } catch (error) {
+    previewLogError("preview_failed", error, {
+      beat_id: beatId ?? null,
+      ffmpeg_path_resolved: ffmpegExecutable,
+      watermark_path: watermarkPath,
+    });
+    throw error;
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
 }
 
-export function getWatermarkTagPath(): string {
-  return join(process.cwd(), "assets", "audio", "watermark-tag.wav");
-}
+export { resolveWatermarkTagPath as getWatermarkTagPath } from "@/lib/audio/watermark-path";

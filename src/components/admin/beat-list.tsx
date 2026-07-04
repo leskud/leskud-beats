@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 import {
   deleteBeat,
-  regenerateBeatPreview,
   updateBeatStatus,
 } from "@/lib/admin/actions";
 import {
@@ -38,15 +37,22 @@ export function BeatList({ beats }: BeatListProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
-  function handleRegeneratePreview(beatId: string, title: string) {
+  function handleRegeneratePreview(beatId: string) {
     startTransition(async () => {
-      const result = await regenerateBeatPreview(beatId);
-      if (result?.error) {
-        alert(result.error);
+      const response = await fetch(`/api/admin/beats/${beatId}/preview`, {
+        method: "POST",
+      });
+      const result = (await response.json().catch(() => null)) as {
+        error?: string;
+        previewMessage?: string | null;
+      } | null;
+
+      if (!response.ok || result?.error) {
+        alert(result?.error ?? "Impossible de régénérer la preview.");
         return;
       }
       router.refresh();
-      alert(result.previewMessage ?? PREVIEW_GENERATED_MESSAGE);
+      alert(result?.previewMessage ?? PREVIEW_GENERATED_MESSAGE);
     });
   }
 
@@ -130,7 +136,7 @@ export function BeatList({ beats }: BeatListProps) {
                 type="button"
                 variant="outline"
                 disabled={isPending}
-                onClick={() => handleRegeneratePreview(beat.id, beat.title)}
+                onClick={() => handleRegeneratePreview(beat.id)}
               >
                 Régénérer preview
               </Button>

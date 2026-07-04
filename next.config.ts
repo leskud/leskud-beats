@@ -5,13 +5,13 @@ const supabaseHost = process.env.NEXT_PUBLIC_SUPABASE_URL
   : "*.supabase.co";
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ["music-metadata"],
+  serverExternalPackages: ["ffmpeg-static", "music-metadata"],
   outputFileTracingIncludes: {
-    "/api/admin/beats/**": [
+    "/*": [
       "./node_modules/ffmpeg-static/**",
       "./assets/audio/**",
     ],
-    "/admin/**": [
+    "/api/admin/beats/**": [
       "./node_modules/ffmpeg-static/**",
       "./assets/audio/**",
     ],

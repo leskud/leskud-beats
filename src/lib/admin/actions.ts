@@ -17,13 +17,13 @@ import {
 } from "@/lib/admin/storage";
 import {
   generateWatermarkedPreview,
-  getWatermarkTagPath,
 } from "@/lib/audio/watermark";
 import {
   NO_PREVIEW_PLAYER_MESSAGE,
   PREVIEW_GENERATED_MESSAGE,
   PREVIEW_SKIPPED_MESSAGE,
 } from "@/lib/audio/preview-messages";
+import { previewLog, previewLogError } from "@/lib/audio/preview-log";
 import { isPreviewGenerationEnabled } from "@/lib/config/env";
 import { downloadR2ObjectBuffer } from "@/lib/storage/r2-presign";
 import {
@@ -151,7 +151,16 @@ async function generatePreviewFromMp3Buffer(
   beatId: string,
   mp3Buffer: Buffer,
 ): Promise<ApplyMp3Result> {
-  if (!isPreviewGenerationEnabled()) {
+  const previewEnabled = isPreviewGenerationEnabled();
+
+  previewLog("admin_preview_attempt", {
+    beat_id: beatId,
+    preview_enabled: previewEnabled,
+    source_mp3_bytes: mp3Buffer.byteLength,
+  });
+
+  if (!previewEnabled) {
+    previewLog("admin_preview_disabled", { beat_id: beatId });
     return {
       previewPath: null,
       previewWarning: PREVIEW_SKIPPED_MESSAGE,
@@ -162,10 +171,7 @@ async function generatePreviewFromMp3Buffer(
   const previewTarget = `${beatId}/preview.mp3`;
 
   try {
-    const previewBuffer = await generateWatermarkedPreview(
-      mp3Buffer,
-      getWatermarkTagPath(),
-    );
+    const previewBuffer = await generateWatermarkedPreview(mp3Buffer, beatId);
     await uploadBeatBuffer(
       supabase,
       STORAGE_BUCKETS.previews,
@@ -173,12 +179,18 @@ async function generatePreviewFromMp3Buffer(
       previewBuffer,
       "audio/mpeg",
     );
+    previewLog("admin_preview_uploaded", {
+      beat_id: beatId,
+      preview_path: previewTarget,
+      preview_bytes: previewBuffer.byteLength,
+    });
     return {
       previewPath: previewTarget,
       previewWarning: null,
       previewGenerated: true,
     };
-  } catch {
+  } catch (error) {
+    previewLogError("admin_preview_failed", error, { beat_id: beatId });
     return {
       previewPath: null,
       previewWarning: PREVIEW_SKIPPED_MESSAGE,
@@ -200,9 +212,19 @@ async function applyMp3Upload(
     .eq("license_type", "mp3");
 
   try {
+    previewLog("admin_mp3_r2_download_start", { beat_id: beatId, mp3_path: mp3Path });
     const mp3Buffer = await downloadR2ObjectBuffer(mp3Path);
+    previewLog("admin_mp3_r2_download_ok", {
+      beat_id: beatId,
+      source_mp3_downloaded: true,
+      source_mp3_bytes: mp3Buffer.byteLength,
+    });
     return await generatePreviewFromMp3Buffer(supabase, beatId, mp3Buffer);
-  } catch {
+  } catch (error) {
+    previewLogError("admin_mp3_or_preview_failed", error, {
+      beat_id: beatId,
+      mp3_path: mp3Path,
+    });
     return {
       previewPath: null,
       previewWarning: PREVIEW_SKIPPED_MESSAGE,
@@ -218,6 +240,7 @@ async function tryRegeneratePreviewFromStoredMp3(
   provider: StorageProvider,
 ): Promise<ApplyMp3Result> {
   if (!isPreviewGenerationEnabled()) {
+    previewLog("admin_preview_disabled", { beat_id: beatId });
     return {
       previewPath: null,
       previewWarning: PREVIEW_SKIPPED_MESSAGE,
@@ -226,9 +249,25 @@ async function tryRegeneratePreviewFromStoredMp3(
   }
 
   try {
+    previewLog("admin_mp3_source_download_start", {
+      beat_id: beatId,
+      mp3_path: mp3Path,
+      storage_provider: provider,
+    });
     const mp3Buffer = await downloadPaidMp3Buffer(supabase, mp3Path, provider);
+    previewLog("admin_mp3_source_download_ok", {
+      beat_id: beatId,
+      source_mp3_downloaded: true,
+      source_mp3_bytes: mp3Buffer.byteLength,
+      storage_provider: provider,
+    });
     return await generatePreviewFromMp3Buffer(supabase, beatId, mp3Buffer);
-  } catch {
+  } catch (error) {
+    previewLogError("admin_regenerate_preview_failed", error, {
+      beat_id: beatId,
+      mp3_path: mp3Path,
+      storage_provider: provider,
+    });
     return {
       previewPath: null,
       previewWarning: PREVIEW_SKIPPED_MESSAGE,
