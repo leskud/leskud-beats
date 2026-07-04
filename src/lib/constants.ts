@@ -1,8 +1,9 @@
 export const BRAND_GOLD = "#c9a962";
 export const BRAND_GOLD_MUTED = "#a68b4b";
 export const BRAND_GOLD_GLOW = "rgba(201, 169, 98, 0.15)";
-export const SITE_NAME = "LeSkud";
-export const SITE_DESCRIPTION = "Instrumentales LeSkud — catalogue et licences.";
+export const SITE_NAME = "LeSkud Beats";
+export const SITE_DESCRIPTION =
+  "Instrumentales LeSkud Beats — catalogue et licences en ligne.";
 export const LOGO_PATH = "/logo/leskud.png";
 export const YOUTUBE_CHANNEL_URL =
   "https://www.youtube.com/channel/UCUu1QVnQLDuhPoUJJoU06qg";

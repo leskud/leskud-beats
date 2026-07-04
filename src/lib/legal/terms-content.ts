@@ -55,7 +55,7 @@ export const CGV_CONTENT = {
     },
     {
       heading: "13. Médiation consommation",
-      body: "Conformément aux articles L612-1 et suivants du Code de la consommation, le client peut recourir gratuitement à un médiateur de la consommation en vue de la résolution amiable d'un litige. Médiateur compétent : [à compléter].",
+      body: `Conformément aux articles L612-1 et suivants du Code de la consommation, le client peut recourir gratuitement à un médiateur de la consommation en vue de la résolution amiable d'un litige. Pour toute demande ou réclamation préalable : ${CONTACT_EMAIL}`,
     },
     {
       heading: "14. Droit applicable",

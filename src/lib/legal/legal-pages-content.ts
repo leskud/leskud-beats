@@ -1,51 +1,26 @@
-import { CONTACT_EMAIL, PRODUCER_NAME } from "@/lib/constants";
+import { CONTACT_EMAIL } from "@/lib/constants";
+
+export const PUBLIC_BRAND_NAME = "LeSkud Beats";
 
 export const MENTIONS_LEGALES_CONTENT = {
   title: "Mentions légales",
-  sections: [
-    {
-      heading: "Éditeur du site",
-      items: [
-        { label: "Nom commercial", value: PRODUCER_NAME },
-        { label: "Responsable de publication", value: "Victor Le Rubrus / LeSkud Beats" },
-        { label: "Email", value: CONTACT_EMAIL },
-        { label: "Statut juridique", value: "[à compléter]" },
-        { label: "SIRET", value: "[à compléter]" },
-        { label: "Adresse", value: "[à compléter]" },
-      ],
-    },
-    {
-      heading: "Hébergement",
-      items: [
-        { label: "Hébergeur", value: "Vercel Inc." },
-        { label: "Adresse", value: "440 N Barranca Ave #4133, Covina, CA 91723, États-Unis" },
-        { label: "Site", value: "https://vercel.com" },
-      ],
-    },
-    {
-      heading: "Stockage et services",
-      items: [
-        {
-          label: "Fichiers payants",
-          value: "Cloudflare R2 (stockage privé des fichiers MP3, WAV, Stems)",
-        },
-        {
-          label: "Base de données, authentification, previews/covers",
-          value: "Supabase",
-        },
-        { label: "Paiements", value: "Stripe" },
-        { label: "Emails transactionnels", value: "Resend (si activé)" },
-      ],
-    },
-    {
-      heading: "Propriété intellectuelle",
-      body: "L'ensemble du site (textes, visuels, structure, logo) est la propriété de LeSkud Beats ou de ses partenaires. Les instrumentales sont protégées par le droit d'auteur. Toute reproduction non autorisée est interdite.",
-    },
-    {
-      heading: "Contact",
-      body: `Pour toute question : ${CONTACT_EMAIL}`,
-    },
+  fields: [
+    { label: "Nom du site", value: PUBLIC_BRAND_NAME },
+    { label: "Contact", value: CONTACT_EMAIL },
+    { label: "Éditeur du site", value: PUBLIC_BRAND_NAME },
   ],
+  hosting: "Vercel",
+  technicalServices: [
+    "Supabase : authentification, base de données, stockage léger",
+    "Cloudflare R2 : stockage des fichiers numériques",
+    "Stripe : paiements sécurisés",
+    "Vercel : hébergement du site",
+  ],
+  intellectualProperty:
+    "Les contenus du site, les visuels, textes, éléments graphiques et instrumentales sont protégés. Toute reproduction ou redistribution non autorisée est interdite.",
+  contactNote: `Pour toute demande : ${CONTACT_EMAIL}`,
+  evolutionNote:
+    "Les informations légales et administratives pourront être complétées en fonction de l'évolution de l'activité.",
 } as const;
 
 export const CONFIDENTIALITE_CONTENT = {
@@ -54,7 +29,7 @@ export const CONFIDENTIALITE_CONTENT = {
   sections: [
     {
       heading: "Responsable du traitement",
-      body: `LeSkud Beats — ${CONTACT_EMAIL}`,
+      body: `${PUBLIC_BRAND_NAME} — ${CONTACT_EMAIL}`,
     },
     {
       heading: "Données collectées",
@@ -74,7 +49,7 @@ export const CONFIDENTIALITE_CONTENT = {
     },
     {
       heading: "Vos droits (RGPD)",
-      body: "Vous disposez d'un droit d'accès, de rectification, d'effacement, de limitation, d'opposition et de portabilité sur vos données personnelles, dans les limites prévues par la réglementation. Contact : leskud.contact@gmail.com",
+      body: `Vous disposez d'un droit d'accès, de rectification, d'effacement, de limitation, d'opposition et de portabilité sur vos données personnelles, dans les limites prévues par la réglementation. Contact : ${CONTACT_EMAIL}`,
     },
     {
       heading: "Cookies",

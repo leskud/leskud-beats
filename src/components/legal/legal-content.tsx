@@ -54,27 +54,69 @@ export function CgvContent() {
 }
 
 export function MentionsLegalesContent() {
+  const content = MENTIONS_LEGALES_CONTENT;
+
   return (
-    <LegalDocumentLayout title={MENTIONS_LEGALES_CONTENT.title}>
-      {MENTIONS_LEGALES_CONTENT.sections.map((section) => (
-        <section key={section.heading}>
-          <h2 className="text-lg font-medium text-gold">{section.heading}</h2>
-          {"items" in section ? (
-            <dl className="mt-3 space-y-2 text-sm">
-              {section.items.map((item) => (
-                <div key={item.label}>
-                  <dt className="text-muted">{item.label}</dt>
-                  <dd className="font-medium">{item.value}</dd>
-                </div>
-              ))}
-            </dl>
-          ) : (
-            <p className="mt-2 text-sm leading-relaxed text-muted">
-              {section.body}
-            </p>
-          )}
-        </section>
-      ))}
+    <LegalDocumentLayout title={content.title}>
+      <section>
+        <dl className="space-y-3 text-sm">
+          {content.fields.map((field) => (
+            <div key={field.label}>
+              <dt className="text-muted">{field.label}</dt>
+              <dd className="font-medium">
+                {field.label === "Contact" ? (
+                  <a
+                    href={`mailto:${field.value}`}
+                    className="text-gold underline-offset-2 hover:underline"
+                  >
+                    {field.value}
+                  </a>
+                ) : (
+                  field.value
+                )}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      </section>
+
+      <section>
+        <h2 className="text-lg font-medium text-gold">Hébergement</h2>
+        <p className="mt-2 text-sm leading-relaxed text-muted">
+          {content.hosting}
+        </p>
+      </section>
+
+      <section>
+        <h2 className="text-lg font-medium text-gold">
+          Services techniques utilisés
+        </h2>
+        <ul className="mt-3 space-y-2 text-sm text-muted">
+          {content.technicalServices.map((service) => (
+            <li key={service}>· {service}</li>
+          ))}
+        </ul>
+      </section>
+
+      <section>
+        <h2 className="text-lg font-medium text-gold">
+          Propriété intellectuelle
+        </h2>
+        <p className="mt-2 text-sm leading-relaxed text-muted">
+          {content.intellectualProperty}
+        </p>
+      </section>
+
+      <section>
+        <h2 className="text-lg font-medium text-gold">Contact</h2>
+        <p className="mt-2 text-sm leading-relaxed text-muted">
+          {content.contactNote}
+        </p>
+      </section>
+
+      <p className="text-sm leading-relaxed text-muted">
+        {content.evolutionNote}
+      </p>
     </LegalDocumentLayout>
   );
 }
