@@ -1,14 +1,6 @@
 import type { LicenseType } from "@/lib/constants";
 import type { DownloadFileType } from "@/lib/orders/download-entitlements";
 
-const LICENSE_FILENAME_LABELS: Record<LicenseType, string> = {
-  mp3: "MP3",
-  wav: "PREMIUM-WAV",
-  stems: "PREMIUM-STEMS",
-  unlimited: "UNLIMITED-STEMS",
-  exclusive: "EXCLUSIVE-LEGACY",
-};
-
 function stripAccents(value: string): string {
   return value.normalize("NFD").replace(/\p{M}/gu, "");
 }
@@ -36,21 +28,50 @@ export function formatKeyForDownloadFilename(musicalKey: string): string {
 }
 
 export function extensionForDownloadFile(
-  fileType: DownloadFileType,
+  assetType: DownloadFileType,
   storagePath: string,
 ): string {
-  if (fileType === "stems") {
+  if (assetType === "stems") {
     const ext = storagePath.split(".").pop()?.toLowerCase();
     return ext === "zip" || ext === "rar" ? ext : "zip";
   }
 
-  if (fileType === "wav") return "wav";
+  if (assetType === "wav") return "wav";
   return "mp3";
+}
+
+/**
+ * Suffixe distinct selon le fichier réellement téléchargé (assetType)
+ * et la licence achetée (licenseType).
+ */
+export function buildAssetFilenameSuffix(
+  assetType: DownloadFileType,
+  licenseType: LicenseType,
+): string {
+  if (assetType === "mp3") {
+    return "MP3";
+  }
+
+  if (assetType === "wav") {
+    if (licenseType === "unlimited") return "WAV_UNLIMITED";
+    if (licenseType === "exclusive") return "WAV_EXCLUSIVE-LEGACY";
+    return "WAV_PREMIUM-WAV";
+  }
+
+  if (licenseType === "stems") return "STEMS_PREMIUM-STEMS";
+  if (licenseType === "unlimited") return "STEMS_UNLIMITED";
+  if (licenseType === "exclusive") return "STEMS_EXCLUSIVE-LEGACY";
+  return "STEMS";
 }
 
 /**
  * Nom client payant — uniquement depuis les métadonnées beat en base.
  * Jamais depuis le nom du fichier uploadé ou le storage path.
+ *
+ * Exemples :
+ * - HOODTRAP_TEST1_LESKUD_140BPM_C_MP3.mp3
+ * - HOODTRAP_TEST1_LESKUD_140BPM_C_WAV_PREMIUM-WAV.wav
+ * - HOODTRAP_TEST1_LESKUD_140BPM_C_STEMS_UNLIMITED.zip
  */
 export function buildPaidDownloadFilename(params: {
   genre?: string | null;
@@ -58,17 +79,20 @@ export function buildPaidDownloadFilename(params: {
   bpm?: number | null;
   musicalKey?: string | null;
   licenseType: LicenseType;
-  fileType: DownloadFileType;
+  assetType: DownloadFileType;
   storagePath: string;
 }): string {
   const genre = sanitizePaidFilenamePart(params.genre ?? "", 24);
   const title = sanitizePaidFilenamePart(params.title, 48);
-  const licenseLabel = LICENSE_FILENAME_LABELS[params.licenseType] ?? "LICENSE";
-  const extension = extensionForDownloadFile(params.fileType, params.storagePath);
+  const extension = extensionForDownloadFile(
+    params.assetType,
+    params.storagePath,
+  );
 
   const segments: string[] = [genre, title, "LESKUD"];
 
-  const bpm = params.bpm != null && params.bpm > 0 ? Math.round(params.bpm) : null;
+  const bpm =
+    params.bpm != null && params.bpm > 0 ? Math.round(params.bpm) : null;
   if (bpm) segments.push(`${bpm}BPM`);
 
   const key = params.musicalKey?.trim()
@@ -76,7 +100,9 @@ export function buildPaidDownloadFilename(params: {
     : "";
   if (key) segments.push(key);
 
-  segments.push(licenseLabel);
+  segments.push(
+    buildAssetFilenameSuffix(params.assetType, params.licenseType),
+  );
 
   return `${segments.join("_")}.${extension}`;
 }

@@ -234,7 +234,7 @@ export async function createPaidDownload(
     bpm: item.beats.bpm,
     musicalKey: item.beats.musical_key,
     licenseType: purchasedLicense,
-    fileType,
+    assetType: fileType,
     storagePath: fileLicense.storage_path,
   });
   const contentType = contentTypeForPath(fileLicense.storage_path);
