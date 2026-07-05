@@ -8,6 +8,8 @@ import {
   deleteBeat,
   updateBeatStatus,
 } from "@/lib/admin/actions";
+import { canPurgeBeat } from "@/lib/admin/purge-eligibility";
+import { PurgeBeatButton } from "@/components/admin/purge-beat-button";
 import {
   NO_PREVIEW_PLAYER_MESSAGE,
   PREVIEW_GENERATED_MESSAGE,
@@ -131,8 +133,9 @@ export function BeatList({ beats }: BeatListProps) {
               </div>
             </div>
 
-            <div className="flex flex-wrap gap-2">
-              <Button
+            <div className="flex w-full flex-col gap-2 sm:w-auto">
+              <div className="flex flex-wrap gap-2">
+                <Button
                 type="button"
                 variant="outline"
                 disabled={isPending}
@@ -180,6 +183,14 @@ export function BeatList({ beats }: BeatListProps) {
                 >
                   Supprimer
                 </Button>
+              )}
+              </div>
+              {canPurgeBeat(beat) && (
+                <PurgeBeatButton
+                  beatId={beat.id}
+                  slug={beat.slug}
+                  title={beat.title}
+                />
               )}
             </div>
           </div>

@@ -7,6 +7,9 @@ import {
   STORAGE_BUCKETS,
 } from "@/lib/constants";
 import { requireAdmin } from "@/lib/admin/require-admin";
+import { canPurgeBeat } from "@/lib/admin/purge-eligibility";
+import { purgeTestBeatBySlug } from "@/lib/admin/purge-test-beat";
+import { createServiceClient } from "@/lib/supabase/service";
 import { resolveCoverPath } from "@/lib/admin/beat-paths";
 import {
   parseTags,
@@ -936,6 +939,47 @@ export async function deleteBeat(beatId: string) {
     revalidatePath("/");
   revalidatePath("/admin");
     return { success: true };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Erreur inconnue.";
+    return { error: message };
+  }
+}
+
+export async function purgeTestBeat(beatId: string, slugConfirmation: string) {
+  try {
+    await requireAdmin();
+    const supabase = createServiceClient();
+
+    const { data: beat, error: beatError } = await supabase
+      .from("beats")
+      .select("id, slug, status")
+      .eq("id", beatId)
+      .single();
+
+    if (beatError || !beat) return { error: "Beat introuvable." };
+    if (!canPurgeBeat(beat)) {
+      return {
+        error:
+          "Ce beat n'est pas éligible à la purge test (prod publiée non test).",
+      };
+    }
+
+    const result = await purgeTestBeatBySlug(supabase, beat.slug, {
+      apply: true,
+      slugConfirmation,
+    });
+
+    if ("error" in result) return { error: result.error };
+
+    revalidatePath("/");
+    revalidatePath("/admin");
+    revalidatePath("/beats");
+    revalidatePath(`/beats/${beat.slug}`);
+
+    return {
+      success: true,
+      warnings: result.warnings,
+    };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Erreur inconnue.";
     return { error: message };
