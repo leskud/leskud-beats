@@ -14,6 +14,7 @@ import {
   getStoredReferrer,
   getStoredUtmParams,
   storeLeadIdentity,
+  triggerFileDownload,
 } from "@/lib/leads/client";
 
 export type FreeDownloadBeat = {
@@ -28,6 +29,12 @@ type FreeDownloadContextValue = {
 
 const FreeDownloadContext = createContext<FreeDownloadContextValue | null>(null);
 
+type SuccessState = {
+  emailWarning?: string;
+  downloadPath: string;
+  previewFilename: string;
+};
+
 export function FreeDownloadProvider({
   children,
 }: {
@@ -36,8 +43,9 @@ export function FreeDownloadProvider({
   const [beat, setBeat] = useState<FreeDownloadBeat | null>(null);
   const [isOpen, setIsOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [successState, setSuccessState] = useState<SuccessState | null>(null);
   const [defaultEmail, setDefaultEmail] = useState("");
   const [defaultName, setDefaultName] = useState("");
 
@@ -48,8 +56,23 @@ export function FreeDownloadProvider({
   const close = useCallback(() => {
     setIsOpen(false);
     setError(null);
-    setSuccessMessage(null);
+    setSuccessState(null);
+    setIsDownloading(false);
   }, []);
+
+  const startDownload = useCallback(
+    async (downloadPath: string, previewFilename: string) => {
+      setIsDownloading(true);
+      try {
+        await triggerFileDownload(downloadPath, previewFilename);
+      } catch {
+        setError("Le téléchargement a échoué. Réessayez avec le bouton ci-dessous.");
+      } finally {
+        setIsDownloading(false);
+      }
+    },
+    [],
+  );
 
   const submitDownload = useCallback(
     async (email: string, name: string, marketingConsent: boolean) => {
@@ -57,7 +80,7 @@ export function FreeDownloadProvider({
 
       setIsSubmitting(true);
       setError(null);
-      setSuccessMessage(null);
+      setSuccessState(null);
 
       const utm = getStoredUtmParams();
 
@@ -78,25 +101,32 @@ export function FreeDownloadProvider({
         const data = (await response.json()) as {
           error?: string;
           emailSent?: boolean;
+          emailWarning?: string;
+          downloadPath?: string;
+          previewFilename?: string;
         };
 
-        if (!response.ok || data.error || !data.emailSent) {
-          setError(data.error ?? "Envoi impossible. Réessayez.");
+        if (!response.ok || data.error || !data.downloadPath || !data.previewFilename) {
+          setError(data.error ?? "Inscription impossible. Réessayez.");
           return;
         }
 
         storeLeadIdentity(email, name);
 
-        setSuccessMessage(
-          `Un email avec le lien de téléchargement vient d'être envoyé à ${email}. Vérifie ta boîte mail (et les spams).`,
-        );
+        const nextSuccess: SuccessState = {
+          emailWarning: data.emailWarning,
+          downloadPath: data.downloadPath,
+          previewFilename: data.previewFilename,
+        };
+        setSuccessState(nextSuccess);
+        void startDownload(data.downloadPath, data.previewFilename);
       } catch {
         setError("Erreur réseau. Réessayez.");
       } finally {
         setIsSubmitting(false);
       }
     },
-    [beat],
+    [beat, startDownload],
   );
 
   const openFreeDownload = useCallback((nextBeat: FreeDownloadBeat) => {
@@ -105,7 +135,7 @@ export function FreeDownloadProvider({
     setDefaultName(stored.name ?? "");
     setBeat(nextBeat);
     setError(null);
-    setSuccessMessage(null);
+    setSuccessState(null);
     setIsOpen(true);
   }, []);
 
@@ -116,12 +146,17 @@ export function FreeDownloadProvider({
         beat={beat}
         isOpen={isOpen}
         isSubmitting={isSubmitting}
+        isDownloading={isDownloading}
         error={error}
-        successMessage={successMessage}
+        successState={successState}
         defaultEmail={defaultEmail}
         defaultName={defaultName}
         onClose={close}
         onSubmit={submitDownload}
+        onDownload={() => {
+          if (!successState) return;
+          void startDownload(successState.downloadPath, successState.previewFilename);
+        }}
       />
     </FreeDownloadContext.Provider>
   );

@@ -93,6 +93,8 @@ export type Lead = {
   email: string;
   name: string | null;
   marketing_consent: boolean;
+  accepted_newsletter_at: string | null;
+  consent_text: string | null;
   source: string;
   created_at: string;
   last_seen_at: string;
@@ -104,6 +106,7 @@ export type LeadDownload = {
   beat_id: string;
   downloaded_at: string;
   user_agent: string | null;
+  client_ip: string | null;
   referrer: string | null;
   utm_source: string | null;
   utm_medium: string | null;

@@ -33,6 +33,8 @@ export async function getLeadsWithStats(
       email: lead.email,
       name: lead.name,
       marketing_consent: lead.marketing_consent,
+      accepted_newsletter_at: lead.accepted_newsletter_at ?? null,
+      consent_text: lead.consent_text ?? null,
       source: lead.source,
       created_at: lead.created_at,
       last_seen_at: lead.last_seen_at,

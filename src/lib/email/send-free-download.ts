@@ -209,6 +209,7 @@ export async function sendFreeDownloadEmail(
   const { apiKey, from } = getResendConfig();
 
   if (!apiKey) {
+    console.warn("[resend] RESEND_API_KEY absente — email preview non envoyé.");
     return { sent: false, error: "RESEND_API_KEY non configurée." };
   }
 
@@ -224,6 +225,7 @@ export async function sendFreeDownloadEmail(
   });
 
   if (error) {
+    console.error("[resend] free-download email failed:", error.message);
     return { sent: false, error: mapResendError(error.message) };
   }
 

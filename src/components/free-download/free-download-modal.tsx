@@ -1,18 +1,27 @@
 "use client";
 
 import Link from "next/link";
+import { Download } from "lucide-react";
 import { useEffect } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { FreeDownloadBeat } from "@/components/free-download/free-download-provider";
+import { FREE_PREVIEW_NEWSLETTER_CONSENT_TEXT } from "@/lib/leads/consent";
+
+type SuccessState = {
+  emailWarning?: string;
+  downloadPath: string;
+  previewFilename: string;
+};
 
 type FreeDownloadModalProps = {
   beat: FreeDownloadBeat | null;
   isOpen: boolean;
   isSubmitting: boolean;
+  isDownloading: boolean;
   error: string | null;
-  successMessage: string | null;
+  successState: SuccessState | null;
   defaultEmail: string;
   defaultName: string;
   onClose: () => void;
@@ -21,18 +30,21 @@ type FreeDownloadModalProps = {
     name: string,
     marketingConsent: boolean,
   ) => Promise<void>;
+  onDownload: () => void;
 };
 
 export function FreeDownloadModal({
   beat,
   isOpen,
   isSubmitting,
+  isDownloading,
   error,
-  successMessage,
+  successState,
   defaultEmail,
   defaultName,
   onClose,
   onSubmit,
+  onDownload,
 }: FreeDownloadModalProps) {
   useEffect(() => {
     if (!isOpen) return;
@@ -51,6 +63,8 @@ export function FreeDownloadModal({
   }, [isOpen, onClose]);
 
   if (!isOpen || !beat || typeof document === "undefined") return null;
+
+  const isSuccess = successState !== null;
 
   return createPortal(
     <div
@@ -80,23 +94,25 @@ export function FreeDownloadModal({
         >
           <div className="border-b border-border px-6 py-5">
             <h2 id="free-download-title" className="text-lg font-semibold">
-              {successMessage ? "Email envoyé" : "Recevoir le MP3 tagué"}
+              {isSuccess ? "Inscription validée." : "Télécharger la preview MP3"}
             </h2>
             <p className="mt-1 text-sm text-muted">
-              {beat.title} — preview gratuite avec filigrane
+              {beat.title} — preview gratuite avec tag
             </p>
           </div>
 
           <div className="space-y-4 px-6 py-5">
-            {successMessage ? (
+            {isSuccess ? (
               <div className="space-y-3">
                 <div className="rounded-lg border border-gold/30 bg-gold/10 px-4 py-3 text-sm text-gold">
-                  {successMessage}
+                  Inscription validée. Tu peux télécharger la preview maintenant.
                 </div>
-                <p className="text-sm text-muted">
-                  Clique sur le lien dans l&apos;email pour télécharger le
-                  fichier.
-                </p>
+                {successState.emailWarning && (
+                  <p className="text-sm text-muted">{successState.emailWarning}</p>
+                )}
+                {isDownloading && (
+                  <p className="text-sm text-muted">Téléchargement en cours…</p>
+                )}
               </div>
             ) : (
               <>
@@ -143,19 +159,14 @@ export function FreeDownloadModal({
                   <input
                     type="checkbox"
                     name="marketingConsent"
-                    defaultChecked
+                    required
                     className="mt-1 shrink-0"
                   />
-                  <span>
-                    J&apos;accepte de recevoir des nouveautés, offres et beats
-                    gratuits par email.
-                  </span>
+                  <span>{FREE_PREVIEW_NEWSLETTER_CONSENT_TEXT}</span>
                 </label>
 
                 <p className="text-xs leading-relaxed text-muted">
-                  On t&apos;envoie le lien de téléchargement par email. Si tu
-                  coches la case, tu recevras aussi nos nouveautés. Tu peux te
-                  désinscrire à tout moment.{" "}
+                  La preview est disponible juste après inscription.{" "}
                   <Link
                     href="/legal/confidentialite"
                     className="text-gold underline-offset-2 hover:underline"
@@ -170,10 +181,21 @@ export function FreeDownloadModal({
           </div>
 
           <div className="flex flex-col-reverse gap-2 border-t border-border px-6 py-4 sm:flex-row sm:justify-end">
-            {successMessage ? (
-              <Button type="button" onClick={onClose}>
-                Fermer
-              </Button>
+            {isSuccess ? (
+              <>
+                <Button type="button" variant="outline" onClick={onClose}>
+                  Fermer
+                </Button>
+                <Button
+                  type="button"
+                  onClick={onDownload}
+                  disabled={isDownloading}
+                  className="inline-flex items-center gap-2"
+                >
+                  <Download className="h-4 w-4" />
+                  {isDownloading ? "Téléchargement…" : "Télécharger la preview"}
+                </Button>
+              </>
             ) : (
               <>
                 <Button
@@ -185,9 +207,7 @@ export function FreeDownloadModal({
                   Annuler
                 </Button>
                 <Button type="submit" disabled={isSubmitting}>
-                  {isSubmitting
-                    ? "Envoi en cours..."
-                    : "Envoyer le lien par email"}
+                  {isSubmitting ? "Inscription…" : "S'inscrire et télécharger"}
                 </Button>
               </>
             )}

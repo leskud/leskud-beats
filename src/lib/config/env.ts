@@ -71,14 +71,6 @@ const serverEnvSchema = z
         });
       }
 
-      if (!env.RESEND_API_KEY) {
-        ctx.addIssue({
-          code: "custom",
-          path: ["RESEND_API_KEY"],
-          message: "RESEND_API_KEY est obligatoire en production.",
-        });
-      }
-
       const r2Keys = [
         "R2_ACCOUNT_ID",
         "R2_ACCESS_KEY_ID",

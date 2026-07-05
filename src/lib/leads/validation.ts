@@ -8,7 +8,12 @@ export const freeDownloadSchema = z.object({
     .email("Adresse email invalide.")
     .max(320),
   name: z.string().trim().max(120).optional().or(z.literal("")),
-  marketingConsent: z.boolean().default(false),
+  marketingConsent: z
+    .boolean()
+    .refine((value) => value === true, {
+      message:
+        "Tu dois accepter de recevoir la newsletter pour télécharger la preview.",
+    }),
   beatId: z.string().uuid("Beat invalide."),
   utmSource: z.string().trim().max(120).optional().or(z.literal("")),
   utmMedium: z.string().trim().max(120).optional().or(z.literal("")),
