@@ -94,7 +94,7 @@ export default async function BeatDetailPage({ params }: Props) {
         <LicensePricingSection
           mode="beat"
           beatLicenses={beat.beat_licenses ?? []}
-          userEmail={user?.email}
+          isLoggedIn={Boolean(user)}
           beatStatus={beat.status}
           beatId={beat.id}
           beatSlug={beat.slug}

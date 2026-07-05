@@ -23,52 +23,85 @@ type CartContextValue = {
   removeItem: (beatId: string) => void;
   clearCart: () => void;
   isHydrated: boolean;
+  isAuthenticated: boolean;
 };
 
 const CartContext = createContext<CartContextValue | null>(null);
 
-export function CartProvider({ children }: { children: React.ReactNode }) {
+export function CartProvider({
+  children,
+  isAuthenticated = false,
+}: {
+  children: React.ReactNode;
+  isAuthenticated?: boolean;
+}) {
   const [items, setItems] = useState<CartLineItem[]>([]);
   const [isHydrated, setIsHydrated] = useState(false);
 
   useEffect(() => {
+    if (!isAuthenticated) {
+      setItems([]);
+      setIsHydrated(true);
+      return;
+    }
+
     setItems(readCartFromStorage().items);
     setIsHydrated(true);
-  }, []);
+  }, [isAuthenticated]);
 
-  const addItem = useCallback((item: CartLineItem) => {
-    setItems((current) => {
-      const next = addOrReplaceCartItem(current, item);
-      writeCartToStorage({ items: next });
-      return next;
-    });
-  }, []);
+  const addItem = useCallback(
+    (item: CartLineItem) => {
+      if (!isAuthenticated) return;
 
-  const removeItem = useCallback((beatId: string) => {
-    setItems((current) => {
-      const next = removeCartItemByBeatId(current, beatId);
-      writeCartToStorage({ items: next });
-      return next;
-    });
-  }, []);
+      setItems((current) => {
+        const next = addOrReplaceCartItem(current, item);
+        writeCartToStorage({ items: next });
+        return next;
+      });
+    },
+    [isAuthenticated],
+  );
+
+  const removeItem = useCallback(
+    (beatId: string) => {
+      if (!isAuthenticated) return;
+
+      setItems((current) => {
+        const next = removeCartItemByBeatId(current, beatId);
+        writeCartToStorage({ items: next });
+        return next;
+      });
+    },
+    [isAuthenticated],
+  );
 
   const clearCart = useCallback(() => {
+    if (!isAuthenticated) return;
+
     setItems(() => {
       writeCartToStorage({ items: [] });
       return [];
     });
-  }, []);
+  }, [isAuthenticated]);
 
   const value = useMemo(
     () => ({
       items,
-      itemCount: items.length,
+      itemCount: isAuthenticated ? items.length : 0,
       addItem,
       removeItem,
       clearCart,
       isHydrated,
+      isAuthenticated,
     }),
-    [items, addItem, removeItem, clearCart, isHydrated],
+    [
+      items,
+      addItem,
+      removeItem,
+      clearCart,
+      isHydrated,
+      isAuthenticated,
+    ],
   );
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;
@@ -93,6 +126,7 @@ export function useCartSafe() {
       removeItem: () => {},
       clearCart: () => {},
       isHydrated: true,
+      isAuthenticated: false,
     }
   );
 }

@@ -60,7 +60,10 @@ export async function POST(request: Request) {
     });
 
     if (!result.success) {
-      return NextResponse.json({ error: result.error }, { status: 400 });
+      return NextResponse.json(
+        { error: result.error },
+        { status: result.status ?? 400 },
+      );
     }
 
     return NextResponse.json({ url: result.url });

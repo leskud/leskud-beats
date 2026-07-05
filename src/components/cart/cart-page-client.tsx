@@ -11,20 +11,18 @@ import {
   TERMS_VERSION,
 } from "@/components/licenses/license-acceptance-checkbox";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { getCartTotalCents } from "@/lib/cart/storage";
 import { STORAGE_BUCKETS } from "@/lib/constants";
 import { formatPrice, getPublicStorageUrl } from "@/lib/utils";
 
 type CartPageClientProps = {
-  userEmail?: string | null;
+  userEmail: string;
 };
 
 export function CartPageClient({ userEmail }: CartPageClientProps) {
   const { items, removeItem, isHydrated } = useCart();
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [acceptedImmediateAccess, setAcceptedImmediateAccess] = useState(false);
-  const [email, setEmail] = useState(userEmail ?? "");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -44,9 +42,9 @@ export function CartPageClient({ userEmail }: CartPageClientProps) {
       return;
     }
 
-    const checkoutEmail = userEmail ?? email.trim();
+    const checkoutEmail = userEmail.trim();
     if (!checkoutEmail) {
-      setError("Indique ton email pour continuer.");
+      setError("Ton compte doit avoir une adresse email pour payer.");
       return;
     }
 
@@ -60,7 +58,6 @@ export function CartPageClient({ userEmail }: CartPageClientProps) {
           items: items.map((item) => ({
             beatLicenseId: item.beatLicenseId,
           })),
-          email: userEmail ? undefined : checkoutEmail,
           acceptedTerms: true,
           acceptedImmediateAccess: true,
           termsVersion: TERMS_VERSION,
@@ -173,16 +170,6 @@ export function CartPageClient({ userEmail }: CartPageClientProps) {
           <span>Total</span>
           <span className="text-gold">{formatPrice(totalCents)}</span>
         </div>
-
-        {!userEmail ? (
-          <Input
-            type="email"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            placeholder="ton@email.com"
-            required
-          />
-        ) : null}
 
         <LicenseAcceptanceCheckbox
           acceptedTerms={acceptedTerms}

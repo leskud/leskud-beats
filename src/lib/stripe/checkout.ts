@@ -49,7 +49,7 @@ export type CreateCheckoutInput = {
 
 export type CreateCheckoutResult =
   | { success: true; url: string }
-  | { success: false; error: string };
+  | { success: false; error: string; status?: number };
 
 type ResolvedLicenseRow = {
   licenseId: string;
@@ -177,13 +177,21 @@ export async function createLicenseCheckout(
     data: { user },
   } = await supabase.auth.getUser();
 
-  const customerEmail =
-    parsed.data.email?.trim().toLowerCase() ?? user?.email?.toLowerCase();
+  if (!user) {
+    return {
+      success: false,
+      error: "Tu dois être connecté pour acheter une licence.",
+      status: 401,
+    };
+  }
+
+  const customerEmail = user.email?.trim().toLowerCase();
 
   if (!customerEmail) {
     return {
       success: false,
-      error: "Indique ton email pour recevoir la licence.",
+      error: "Ton compte doit avoir une adresse email pour acheter.",
+      status: 400,
     };
   }
 

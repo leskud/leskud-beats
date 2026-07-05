@@ -40,7 +40,7 @@ export async function Header() {
             className="md:hidden"
           />
 
-          <CartHeaderLink />
+          {user ? <CartHeaderLink /> : null}
 
           {user ? (
             <UserMenu email={user.email ?? ""} isAdmin={profile?.is_admin} />

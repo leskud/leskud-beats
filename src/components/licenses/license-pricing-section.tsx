@@ -22,7 +22,7 @@ import { cn } from "@/lib/utils";
 type LicensePricingSectionProps = {
   mode: "home" | "beat";
   beatLicenses?: BeatLicense[];
-  userEmail?: string | null;
+  isLoggedIn?: boolean;
   beatStatus?: BeatStatus;
   beatId?: string;
   beatSlug?: string;
@@ -42,6 +42,7 @@ function getAvailabilityMap(
 export function LicensePricingSection({
   mode,
   beatLicenses = [],
+  isLoggedIn = false,
   beatStatus,
   beatId = "",
   beatSlug = "",
@@ -121,6 +122,18 @@ export function LicensePricingSection({
     }
 
     if (availability?.available && availability.licenseId) {
+      if (!isLoggedIn) {
+        const loginHref = `/login?next=${encodeURIComponent(`/beats/${beatSlug}`)}`;
+        return (
+          <Link
+            href={loginHref}
+            className="inline-flex h-9 w-full items-center justify-center rounded-lg border border-gold/40 text-sm text-gold transition-colors hover:bg-gold/10"
+          >
+            Connecte-toi pour acheter
+          </Link>
+        );
+      }
+
       return (
         <button
           type="button"
@@ -147,11 +160,13 @@ export function LicensePricingSection({
           Quatre licences non-exclusives pour sortir ta musique.
           {mode === "home"
             ? " Consulte le détail complet avant d'acheter."
-            : " Ajoute ta licence au panier pour finaliser ton achat."}
+            : isLoggedIn
+              ? " Ajoute ta licence au panier pour finaliser ton achat."
+              : " Connecte-toi pour acheter une licence."}
         </p>
       </div>
 
-      {cartFeedback ? (
+      {cartFeedback && isLoggedIn ? (
         <div className="mb-6 rounded-xl border border-gold/30 bg-gold/10 p-4 text-sm">
           <p className="font-medium text-gold">
             Licence ajoutée au panier — {cartFeedback}
